@@ -15,6 +15,7 @@ const Scene3D = lazy(() => import('../../canvas/Scene3D'));
 interface Product {
   _id: string; name: string; platform: string; category: string;
   price: number; originalPrice: number; duration: string; stock: number;
+  stockStatus?: string;
   gradientFrom: string; gradientTo: string; features: string[];
   isFeatured: boolean; imageUrl?: string;
 }
@@ -246,6 +247,7 @@ function UserShop({ products, loading }: { products: Product[]; loading: boolean
   const [category, setCategory] = useState('All');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('popular');
+  const [inStockOnly, setInStockOnly] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [walletOpen, setWalletOpen] = useState(false);
   const { addItem, items } = useCartStore();
@@ -257,6 +259,7 @@ function UserShop({ products, loading }: { products: Product[]; loading: boolean
   const filtered = (() => {
     let result = products;
     if (category !== 'All') result = result.filter((p) => p.category === category);
+    if (inStockOnly) result = result.filter((p) => p.stock > 0);
     if (search) result = result.filter((p) =>
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.platform.toLowerCase().includes(search.toLowerCase())
@@ -266,6 +269,7 @@ function UserShop({ products, loading }: { products: Product[]; loading: boolean
     else if (sort === 'discount') result = [...result].sort((a, b) =>
       ((b.originalPrice - b.price) / b.originalPrice) - ((a.originalPrice - a.price) / a.originalPrice)
     );
+    else result = [...result].sort((a, b) => (b.stock > 0 ? 1 : 0) - (a.stock > 0 ? 1 : 0) || 0); // in-stock first for popular
     return result;
   })();
 
@@ -401,6 +405,16 @@ function UserShop({ products, loading }: { products: Product[]; loading: boolean
               <option key={o.value} value={o.value} className="bg-[#0f0f1a]">{o.label}</option>
             ))}
           </select>
+          <button
+            onClick={() => setInStockOnly(!inStockOnly)}
+            className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition-all border ${
+              inStockOnly
+                ? 'bg-green-500/20 border-green-500/40 text-green-400'
+                : 'glass border-white/10 text-white/50 hover:text-white'
+            }`}
+          >
+            🟢 In Stock Only
+          </button>
         </motion.div>
 
         {/* Category tabs */}

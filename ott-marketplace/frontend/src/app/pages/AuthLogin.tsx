@@ -113,15 +113,6 @@ export default function AuthLogin() {
             </motion.button>
           </form>
 
-          {/* Demo accounts */}
-          <div className="mt-6 p-4 rounded-xl bg-white/5 border border-white/10">
-            <p className="text-white/50 text-xs font-medium mb-2">Demo Accounts:</p>
-            <div className="space-y-1 text-xs text-white/40">
-              <p><span className="text-indigo-400">Admin:</span> chethanshetty242@gmail.com</p>
-              <p><span className="text-purple-400">User:</span> user@site.com / user123</p>
-            </div>
-          </div>
-
           <p className="text-center text-white/40 text-sm mt-6">
             Don't have an account?{' '}
             <Link to="/signup" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">

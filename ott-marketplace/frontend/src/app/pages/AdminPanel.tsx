@@ -231,6 +231,14 @@ export default function AdminPanel() {
     } catch { toast.error('Failed'); }
   };
 
+  const handleStockUpdate = async (id: string, stock: number) => {
+    try {
+      const { data } = await api.patch(`/products/${id}/stock`, { stock });
+      setProducts((prev) => prev.map((p) => p._id === id ? { ...p, stock: data.product.stock } : p));
+      toast.success(`Stock updated to ${stock}`);
+    } catch (err: any) { toast.error(err.response?.data?.error || 'Failed to update stock'); }
+  };
+
   const handleFundSuccess = (userId: string, newBalance: number) => {
     setUsers((prev) => prev.map((u) =>
       u._id === userId ? { ...u, wallet: newBalance, walletBalance: newBalance } : u
@@ -337,19 +345,60 @@ export default function AdminPanel() {
           {/* ── Products ── */}
           {activeTab === 'Products' && (
             <div className="glass rounded-2xl p-6 border border-white/10">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-white font-semibold text-lg">Products</h3>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                <div>
+                  <h3 className="text-white font-semibold text-lg">Products</h3>
+                  <div className="flex items-center gap-3 mt-1 text-xs">
+                    <span className="text-green-400">🟢 In Stock: {products.filter(p => p.stock > 5).length}</span>
+                    <span className="text-orange-400">🟡 Low Stock: {products.filter(p => p.stock > 0 && p.stock <= 5).length}</span>
+                    <span className="text-red-400">🔴 Out of Stock: {products.filter(p => p.stock === 0).length}</span>
+                  </div>
+                </div>
                 <button onClick={() => openProductDialog()} className="btn-primary text-sm py-2 px-4">
                   <i className="pi pi-plus mr-1 text-xs" /> Add Product
                 </button>
               </div>
               <DataTable value={products} loading={loading} paginator rows={10} emptyMessage="No products">
-                <Column field="name" header="Name" style={{ minWidth: '180px' }} />
+                <Column field="name" header="Name" style={{ minWidth: '160px' }} />
                 <Column field="platform" header="Platform" />
                 <Column field="price" header="Price" body={(r) => <span className="text-indigo-400 font-bold">₹{r.price}</span>} />
                 <Column field="duration" header="Duration" />
-                <Column field="stock" header="Stock" body={(r) => <span className={r.stock < 10 ? 'text-red-400 font-bold' : ''}>{r.stock}</span>} />
-                <Column field="isActive" header="Status" body={(r) => (
+                <Column header="Stock" style={{ minWidth: '140px' }} body={(r) => (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      defaultValue={r.stock}
+                      className="w-16 px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-white text-xs text-center focus:outline-none focus:border-indigo-500/50"
+                      onBlur={(e) => {
+                        const val = parseInt(e.target.value);
+                        if (!isNaN(val) && val !== r.stock) handleStockUpdate(r._id, val);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const val = parseInt((e.target as HTMLInputElement).value);
+                          if (!isNaN(val)) handleStockUpdate(r._id, val);
+                        }
+                      }}
+                    />
+                    <div className="flex gap-1">
+                      <button onClick={() => handleStockUpdate(r._id, 0)} title="Set out of stock"
+                        className="p-1 rounded text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition-colors text-xs">
+                        <i className="pi pi-times-circle" />
+                      </button>
+                      <button onClick={() => handleStockUpdate(r._id, 100)} title="Restock to 100"
+                        className="p-1 rounded text-green-400/60 hover:text-green-400 hover:bg-green-500/10 transition-colors text-xs">
+                        <i className="pi pi-refresh" />
+                      </button>
+                    </div>
+                  </div>
+                )} />
+                <Column header="Stock Status" body={(r) => {
+                  if (r.stock === 0) return <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-medium">🔴 Out of Stock</span>;
+                  if (r.stock <= 5) return <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-medium">🟡 Low Stock</span>;
+                  return <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 font-medium">🟢 In Stock</span>;
+                }} />
+                <Column field="isActive" header="Active" body={(r) => (
                   <Tag value={r.deletedAt ? 'Deleted' : r.isActive ? 'Active' : 'Inactive'}
                     severity={r.deletedAt ? 'danger' : r.isActive ? 'success' : 'warning'} />
                 )} />
@@ -657,13 +706,51 @@ export default function AdminPanel() {
                                   )}
 
                                   <div>
-                                    <label className="text-white/60 text-xs block mb-1">QR Code URL (optional)</label>
+                                    <label className="text-white/60 text-xs block mb-1">QR Code (optional)</label>
+                                    {/* Upload */}
+                                    <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border-2 border-dashed border-white/20 hover:border-indigo-500/60 transition-colors bg-white/5 mb-2">
+                                      <i className="pi pi-upload text-indigo-400 text-sm" />
+                                      <span className="text-white/50 text-xs">Upload QR image</span>
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          if (!file) return;
+                                          const reader = new FileReader();
+                                          reader.onload = (ev) => {
+                                            setPayForm((f) => ({ ...f, qrCodeUrl: ev.target?.result as string }));
+                                          };
+                                          reader.readAsDataURL(file);
+                                          e.target.value = '';
+                                        }}
+                                      />
+                                    </label>
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <div className="flex-1 h-px bg-white/10" />
+                                      <span className="text-white/30 text-xs">or paste URL</span>
+                                      <div className="flex-1 h-px bg-white/10" />
+                                    </div>
                                     <input
-                                      value={payForm.qrCodeUrl}
+                                      value={payForm.qrCodeUrl.startsWith('data:') ? '' : payForm.qrCodeUrl}
                                       onChange={(e) => setPayForm((f) => ({ ...f, qrCodeUrl: e.target.value }))}
-                                      placeholder="https://... (link to your QR image)"
+                                      placeholder="https://... (link to QR image)"
                                       className="input-field text-sm"
                                     />
+                                    {/* Preview */}
+                                    {payForm.qrCodeUrl && (
+                                      <div className="relative mt-2 w-24 h-24 rounded-lg overflow-hidden border border-white/10 bg-white/5">
+                                        <img src={payForm.qrCodeUrl} alt="QR Preview" className="w-full h-full object-contain p-1" />
+                                        <button
+                                          type="button"
+                                          onClick={() => setPayForm((f) => ({ ...f, qrCodeUrl: '' }))}
+                                          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white/70 hover:text-red-400 flex items-center justify-center text-xs"
+                                        >
+                                          <i className="pi pi-times" />
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
 
                                   {['bank', 'binance', 'other'].includes(payForm.type) && (

@@ -7,62 +7,59 @@ export interface NotifCounts { support: number; broadcasts: number; }
 
 const STORAGE_KEY = 'ottmarket_notif_counts';
 
-function loadCached(): NotifCounts {
+// ── Shared singleton state so all hook instances stay in sync ─────────────────
+type Listener = (counts: NotifCounts) => void;
+const listeners = new Set<Listener>();
+let sharedCounts: NotifCounts = (() => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw);
   } catch { /* ignore */ }
   return { support: 0, broadcasts: 0 };
+})();
+
+function setShared(next: NotifCounts) {
+  sharedCounts = next;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  listeners.forEach((fn) => fn(next));
 }
 
-function saveCached(counts: NotifCounts) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(counts));
+function updateShared(partial: Partial<NotifCounts>) {
+  setShared({ ...sharedCounts, ...partial });
 }
+// ─────────────────────────────────────────────────────────────────────────────
 
 let socketRef: Socket | null = null;
 
 export function useNotifications() {
   const { user, isAuthenticated, isAdmin } = useAuth();
-  const [counts, setCounts] = useState<NotifCounts>(loadCached);
+  const [counts, setCounts] = useState<NotifCounts>(() => sharedCounts);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const updateCounts = useCallback((partial: Partial<NotifCounts>) => {
-    setCounts((prev) => {
-      const next = { ...prev, ...partial };
-      // For incremental updates (socket), add rather than replace
-      if (partial.support !== undefined && partial.support === 1 && prev.support !== undefined) {
-        next.support = prev.support + 1;
-      }
-      if (partial.broadcasts !== undefined && partial.broadcasts === 1 && prev.broadcasts !== undefined) {
-        next.broadcasts = prev.broadcasts + 1;
-      }
-      saveCached(next);
-      return next;
-    });
+  // Subscribe to shared state changes
+  useEffect(() => {
+    const listener: Listener = (c) => setCounts(c);
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
   }, []);
 
   const fetchCounts = useCallback(async () => {
     if (!isAuthenticated) return;
     try {
       const { data } = await api.get<NotifCounts>('/notifications/counts');
-      setCounts(data);
-      saveCached(data);
+      setShared(data);
     } catch { /* ignore */ }
   }, [isAuthenticated]);
 
   const markRead = useCallback(async (type: 'support' | 'broadcasts', ticketId?: string) => {
-    // Optimistic update
-    setCounts((prev) => {
-      const next = { ...prev, [type]: ticketId ? Math.max(0, prev[type] - 1) : 0 };
-      saveCached(next);
-      return next;
-    });
+    // Optimistic update — clear immediately
+    const next = { ...sharedCounts, [type]: ticketId ? Math.max(0, sharedCounts[type] - 1) : 0 };
+    setShared(next);
     try {
       await api.post('/notifications/mark-read', { type, ticketId });
-      // Re-fetch to confirm server state
+      // Re-fetch to get accurate server count
       const { data } = await api.get<NotifCounts>('/notifications/counts');
-      setCounts(data);
-      saveCached(data);
+      setShared(data);
     } catch { /* ignore */ }
   }, []);
 
@@ -70,27 +67,25 @@ export function useNotifications() {
     if (!isAuthenticated || !user?._id) return;
 
     fetchCounts();
-
-    // Poll every 30s
     pollRef.current = setInterval(fetchCounts, 30_000);
 
-    // Socket
     if (!socketRef) {
       socketRef = io('/', { path: '/socket.io', transports: ['websocket'] });
     }
+
     if (isAdmin) {
       socketRef.emit('join_admin');
       socketRef.on('admin_notification_update', (data: Partial<NotifCounts>) => {
-        setCounts((prev) => {
-          const next = { ...prev, ...data };
-          saveCached(next);
-          return next;
-        });
+        updateShared(data);
       });
     } else {
       socketRef.emit('join_user', { userId: user._id });
       socketRef.on('notification_update', (data: Partial<NotifCounts>) => {
-        updateCounts(data);
+        // For socket incremental pushes, add to existing count
+        const next: NotifCounts = { ...sharedCounts };
+        if (data.support !== undefined) next.support = sharedCounts.support + data.support;
+        if (data.broadcasts !== undefined) next.broadcasts = sharedCounts.broadcasts + data.broadcasts;
+        setShared(next);
       });
     }
 
@@ -104,8 +99,7 @@ export function useNotifications() {
   // Reset on logout
   useEffect(() => {
     if (!isAuthenticated) {
-      setCounts({ support: 0, broadcasts: 0 });
-      saveCached({ support: 0, broadcasts: 0 });
+      setShared({ support: 0, broadcasts: 0 });
     }
   }, [isAuthenticated]);
 

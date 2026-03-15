@@ -17,6 +17,7 @@ const productSchema = new mongoose.Schema(
     // durationDays is optional — defaults to 30 so admin form doesn't need to send it
     durationDays: { type: Number, default: 30 },
     stock: { type: Number, default: 100, min: 0 },
+    waitlist: [{ type: String }], // user emails for out-of-stock notifications
     imageUrl: { type: String, default: '' },
     logo: { type: String, default: '' },
     color: { type: String, default: '#6366f1' },
@@ -39,5 +40,15 @@ productSchema.pre(/^find/, function (next) {
   }
   next();
 });
+
+// Virtual: auto-compute stockStatus from stock qty
+productSchema.virtual('stockStatus').get(function () {
+  if (this.stock === 0) return 'out_of_stock';
+  if (this.stock <= 5) return 'low_stock';
+  return 'in_stock';
+});
+
+productSchema.set('toJSON', { virtuals: true });
+productSchema.set('toObject', { virtuals: true });
 
 module.exports = mongoose.model('Product', productSchema);
