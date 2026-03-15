@@ -1,4 +1,5 @@
 const Ticket = require('../models/Ticket');
+const Notification = require('../models/Notification');
 
 exports.createTicket = async (req, res) => {
   try {
@@ -87,6 +88,37 @@ exports.replyTicket = async (req, res) => {
       ticketId: ticket._id,
       message: newMsg,
     });
+
+    // Create notification for user when admin replies
+    if (req.user.role === 'admin') {
+      try {
+        await Notification.create({
+          userId: ticket.user,
+          type: 'ticket_reply',
+          ticketId: ticket._id,
+          data: { title: ticket.subject, message: message.slice(0, 100) },
+        });
+        const support = await Notification.countDocuments({ userId: ticket.user, type: 'ticket_reply', isRead: false });
+        io.to(`user_${ticket.user}`).emit('notification_update', { support });
+      } catch (notifErr) {
+        console.error('Notification error (admin→user):', notifErr.message);
+      }
+    }
+
+    // Create notification for admin when user replies
+    if (req.user.role !== 'admin') {
+      try {
+        await Notification.create({
+          type: 'ticket_user_message',
+          ticketId: ticket._id,
+          data: { title: ticket.subject, message: message.slice(0, 100) },
+        });
+        const adminTickets = await Notification.countDocuments({ type: 'ticket_user_message', isRead: false });
+        io.to('admin_room').emit('admin_notification_update', { support: adminTickets });
+      } catch (notifErr) {
+        console.error('Notification error (user→admin):', notifErr.message);
+      }
+    }
 
     res.json({ ticket });
   } catch (err) {

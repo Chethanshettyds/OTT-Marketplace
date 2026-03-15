@@ -5,22 +5,24 @@ import { useAuth } from '../hooks/useAuth';
 import { useCartStore } from '../store/cartStore';
 import { useCurrency } from '../hooks/useCurrency';
 import { CURRENCIES } from '../utils/currency';
+import { useNotifications } from '../hooks/useNotifications';
 
 export default function Navbar() {
   const { user, isAuthenticated, isAdmin, logout } = useAuth();
   const { items } = useCartStore();
   const { currency, setCurrency, format } = useCurrency();
+  const { counts } = useNotifications();
   const [menuOpen, setMenuOpen] = useState(false);
   const [currencyOpen, setCurrencyOpen] = useState(false);
   const location = useLocation();
 
   const navLinks = isAdmin
-    ? [{ to: '/admin', label: 'Admin Panel', icon: 'pi-cog' }]
+    ? [{ to: '/admin', label: 'Admin Panel', icon: 'pi-cog', badge: counts.support }]
     : [
-        { to: '/shop', label: 'Shop', icon: 'pi-shopping-bag' },
-        { to: '/dashboard', label: 'Dashboard', icon: 'pi-th-large' },
-        { to: '/tickets', label: 'Support', icon: 'pi-ticket' },
-        { to: '/broadcasts', label: 'Broadcasts', icon: 'pi-megaphone' },
+        { to: '/shop', label: 'Shop', icon: 'pi-shopping-bag', badge: 0 },
+        { to: '/dashboard', label: 'Dashboard', icon: 'pi-th-large', badge: 0 },
+        { to: '/tickets', label: 'Support', icon: 'pi-ticket', badge: counts.support },
+        { to: '/broadcasts', label: 'Broadcasts', icon: 'pi-megaphone', badge: counts.broadcasts },
       ];
 
   return (
@@ -43,7 +45,7 @@ export default function Navbar() {
               <Link
                 key={link.to}
                 to={link.to}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                   location.pathname.startsWith(link.to)
                     ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
                     : 'text-white/70 hover:text-white hover:bg-white/5'
@@ -51,6 +53,18 @@ export default function Navbar() {
               >
                 <i className={`pi ${link.icon} text-xs`} />
                 {link.label}
+                {link.badge > 0 && (
+                  <motion.span
+                    key={link.badge}
+                    initial={{ scale: 0.5, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center text-white ${
+                      link.to === '/tickets' ? 'bg-blue-500' : 'bg-red-500'
+                    }`}
+                  >
+                    {link.badge > 99 ? '99+' : link.badge}
+                  </motion.span>
+                )}
               </Link>
             ))}
           </div>
@@ -197,10 +211,17 @@ export default function Navbar() {
                   key={link.to}
                   to={link.to}
                   onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg text-white/70 hover:text-white hover:bg-white/5 transition-colors"
+                  className="relative flex items-center gap-3 px-4 py-3 rounded-lg text-white/70 hover:text-white hover:bg-white/5 transition-colors"
                 >
                   <i className={`pi ${link.icon}`} />
                   {link.label}
+                  {link.badge > 0 && (
+                    <span className={`ml-auto min-w-[20px] h-5 px-1 rounded-full text-xs font-bold flex items-center justify-center text-white ${
+                      link.to === '/tickets' ? 'bg-blue-500' : 'bg-red-500'
+                    }`}>
+                      {link.badge > 99 ? '99+' : link.badge}
+                    </span>
+                  )}
                 </Link>
               ))}
             </div>

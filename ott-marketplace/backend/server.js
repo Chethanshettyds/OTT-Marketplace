@@ -14,6 +14,7 @@ const ticketRoutes = require('./routes/tickets');
 const adminRoutes = require('./routes/admin');
 const userRoutes = require('./routes/user');
 const broadcastRoutes = require('./routes/broadcast');
+const notificationRoutes = require('./routes/notifications');
 
 const app = express();
 const server = http.createServer(app);
@@ -49,6 +50,7 @@ app.use('/api/tickets', ticketRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/broadcast', broadcastRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'OK', time: new Date() }));
 
@@ -66,6 +68,11 @@ io.on('connection', (socket) => {
   // User joins their personal room for broadcast notifications
   socket.on('join_user', ({ userId }) => {
     if (userId) socket.join(`user_${userId}`);
+  });
+
+  // Admin joins admin room for ticket notifications
+  socket.on('join_admin', () => {
+    socket.join('admin_room');
   });
 
   socket.on('send_message', (data) => {

@@ -11,6 +11,7 @@ import { useForm } from 'react-hook-form';
 import { PAYMENT_TYPES } from '../utils/paymentTypes';
 import BroadcastModal from '../components/BroadcastModal';
 import FundWalletModal from '../components/FundWalletModal';
+import { useNotifications } from '../hooks/useNotifications';
 
 const TABS = ['Dashboard', 'Products', 'Orders', 'Users', 'Payments', 'Tickets', 'Broadcast', 'Settings'];
 
@@ -85,10 +86,11 @@ export default function AdminPanel() {
   const [broadcastLoading, setBroadcastLoading] = useState(false);
   const [broadcastModalOpen, setBroadcastModalOpen] = useState(false);
 
-  const { register, handleSubmit, reset, watch } = useForm<Partial<Product>>();
+  const { register, handleSubmit, reset, watch, setValue } = useForm<Partial<Product>>();
 
   // ── Fund Wallet modal ─────────────────────────────────────────────────────
   const [fundTarget, setFundTarget] = useState<User | null>(null);
+  const { counts, markRead } = useNotifications();
 
   useEffect(() => { fetchStats(); }, []);
 
@@ -239,7 +241,7 @@ export default function AdminPanel() {
   const statCards = stats ? [
     { label: 'Total Users', value: stats.totalUsers, icon: 'pi-users', color: 'from-blue-500 to-cyan-500' },
     { label: 'Total Orders', value: stats.totalOrders, icon: 'pi-shopping-bag', color: 'from-indigo-500 to-purple-600' },
-    { label: 'Total Revenue', value: `$${stats.totalRevenue.toFixed(2)}`, icon: 'pi-dollar', color: 'from-yellow-500 to-orange-500' },
+    { label: 'Total Revenue', value: `₹${stats.totalRevenue.toFixed(2)}`, icon: 'pi-dollar', color: 'from-yellow-500 to-orange-500' },
     { label: 'Low Stock', value: stats.lowStockProducts.length, icon: 'pi-exclamation-triangle', color: 'from-red-500 to-pink-500' },
     { label: 'Pending Payments', value: stats.pendingPayments.length, icon: 'pi-clock', color: 'from-orange-500 to-red-500' },
   ] : [];
@@ -261,8 +263,13 @@ export default function AdminPanel() {
         <div className="flex gap-1 mb-6 glass rounded-xl p-1 w-fit overflow-x-auto">
           {TABS.map((tab) => (
             <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200 ${activeTab === tab ? 'bg-indigo-500 text-white' : 'text-white/50 hover:text-white'}`}>
+              className={`relative px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200 ${activeTab === tab ? 'bg-indigo-500 text-white' : 'text-white/50 hover:text-white'}`}>
               {tab}
+              {tab === 'Tickets' && counts.support > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center text-white bg-red-500">
+                  {counts.support > 99 ? '99+' : counts.support}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -299,7 +306,7 @@ export default function AdminPanel() {
                           <p className="text-white/40 text-xs">{o.user?.email} · {o.orderNumber}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-indigo-400 font-bold">${o.amount}</p>
+                          <p className="text-indigo-400 font-bold">₹{o.amount}</p>
                           <span className={`text-xs ${o.status === 'delivered' ? 'text-green-400' : o.status === 'cancelled' ? 'text-red-400' : 'text-yellow-400'}`}>{o.status}</span>
                         </div>
                       </div>
@@ -339,7 +346,7 @@ export default function AdminPanel() {
               <DataTable value={products} loading={loading} paginator rows={10} emptyMessage="No products">
                 <Column field="name" header="Name" style={{ minWidth: '180px' }} />
                 <Column field="platform" header="Platform" />
-                <Column field="price" header="Price" body={(r) => <span className="text-indigo-400 font-bold">${r.price}</span>} />
+                <Column field="price" header="Price" body={(r) => <span className="text-indigo-400 font-bold">₹{r.price}</span>} />
                 <Column field="duration" header="Duration" />
                 <Column field="stock" header="Stock" body={(r) => <span className={r.stock < 10 ? 'text-red-400 font-bold' : ''}>{r.stock}</span>} />
                 <Column field="isActive" header="Status" body={(r) => (
@@ -370,7 +377,7 @@ export default function AdminPanel() {
                 <Column field="orderNumber" header="Order #" style={{ minWidth: '160px' }} />
                 <Column header="User" body={(r) => <span>{r.user?.name}<br /><span className="text-white/40 text-xs">{r.user?.email}</span></span>} />
                 <Column header="Product" body={(r) => <span>{r.productSnapshot?.name}</span>} />
-                <Column header="Amount" body={(r) => <span className="text-indigo-400 font-bold">${r.amount}</span>} />
+                <Column header="Amount" body={(r) => <span className="text-indigo-400 font-bold">₹{r.amount}</span>} />
                 <Column header="Method" body={(r) => <span className="text-white/60 text-xs capitalize">{r.paymentDetails?.method || 'wallet'}</span>} />
                 <Column header="Status" body={(r) => (
                   <Tag value={r.status} severity={r.status === 'delivered' ? 'success' : r.status === 'cancelled' ? 'danger' : r.status === 'refunded' ? 'warning' : 'info'} />
@@ -473,7 +480,10 @@ export default function AdminPanel() {
                 rows={10}
                 emptyMessage="No tickets"
                 rowClassName={() => 'cursor-pointer hover:bg-white/5 transition-colors'}
-                onRowClick={(e) => navigate(`/admin/tickets/${e.data._id}`)}
+                onRowClick={(e) => {
+                  markRead('support', e.data._id);
+                  navigate(`/admin/tickets/${e.data._id}`);
+                }}
               >
                 <Column field="ticketNumber" header="Ticket #" />
                 <Column header="User" body={(r) => <span>{r.user?.name}<br /><span className="text-white/40 text-xs">{r.user?.email}</span></span>} />
@@ -811,9 +821,7 @@ export default function AdminPanel() {
                   reader.onload = (ev) => {
                     const result = ev.target?.result as string;
                     setImagePreview(result);
-                    // inject into react-hook-form
-                    const input = document.querySelector<HTMLInputElement>('input[name="imageUrl"]');
-                    if (input) { input.value = result; input.dispatchEvent(new Event('input', { bubbles: true })); }
+                    setValue('imageUrl', result);
                   };
                   reader.readAsDataURL(file);
                 }}
@@ -830,7 +838,7 @@ export default function AdminPanel() {
               {...register('imageUrl')}
               placeholder="https://..."
               className="input-field text-sm"
-              onChange={(e) => setImagePreview(e.target.value)}
+              onChange={(e) => { setImagePreview(e.target.value); setValue('imageUrl', e.target.value); }}
             />
 
             {/* Preview */}
@@ -844,7 +852,7 @@ export default function AdminPanel() {
                 />
                 <button
                   type="button"
-                  onClick={() => { setImagePreview(''); reset({ ...watch(), imageUrl: '' }); }}
+                  onClick={() => { setImagePreview(''); setValue('imageUrl', ''); }}
                   className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 text-white/70 hover:text-red-400 flex items-center justify-center text-xs"
                 >
                   <i className="pi pi-times" />

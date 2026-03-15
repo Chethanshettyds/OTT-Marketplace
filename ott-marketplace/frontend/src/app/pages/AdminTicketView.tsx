@@ -5,6 +5,7 @@ import { io, Socket } from 'socket.io-client';
 import api from '../utils/api';
 import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
+import { useNotifications } from '../hooks/useNotifications';
 
 interface Attachment {
   filename: string;
@@ -64,6 +65,7 @@ export default function AdminTicketView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { markRead } = useNotifications();
 
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [loading, setLoading] = useState(true);
@@ -79,6 +81,7 @@ export default function AdminTicketView() {
   useEffect(() => {
     if (!id) return;
     fetchTicket();
+    markRead('support', id); // clear this ticket's unread notification immediately
 
     socket = io('/', { path: '/socket.io', transports: ['websocket'] });
     socket.emit('join_ticket', { ticketId: id, userId: user?._id });

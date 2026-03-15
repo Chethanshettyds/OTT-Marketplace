@@ -4,6 +4,7 @@ import { io, Socket } from 'socket.io-client';
 import api from '../utils/api';
 import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
+import { useNotifications } from '../hooks/useNotifications';
 
 interface Broadcast {
   _id: string;
@@ -26,12 +27,14 @@ let socket: Socket | null = null;
 
 export default function BroadcastsPage() {
   const { user } = useAuth();
+  const { markRead: markNotifRead } = useNotifications();
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
     fetchBroadcasts();
+    markNotifRead('broadcasts');
 
     socket = io('/', { path: '/socket.io', transports: ['websocket'] });
     socket.emit('join_user', { userId: user?._id });

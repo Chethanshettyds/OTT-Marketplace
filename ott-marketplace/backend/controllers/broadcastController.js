@@ -1,4 +1,5 @@
 const Broadcast = require('../models/Broadcast');
+const Notification = require('../models/Notification');
 const User = require('../models/User');
 const Order = require('../models/Order');
 const rateLimit = require('express-rate-limit');
@@ -76,6 +77,20 @@ exports.sendBroadcast = async (req, res) => {
         adminName: broadcast.adminName,
         sentAt: broadcast.sentAt,
       });
+    });
+
+    // Create Notification records for each recipient
+    const notifDocs = sentTo.map((userId) => ({
+      userId,
+      type: 'broadcast',
+      broadcastId: broadcast._id,
+      data: { title: broadcast.subject, message: broadcast.message.slice(0, 100) },
+    }));
+    await Notification.insertMany(notifDocs);
+
+    // Emit notification_update to each user's socket room
+    sentTo.forEach((userId) => {
+      io.to(`user_${userId}`).emit('notification_update', { broadcasts: 1 });
     });
 
     res.status(201).json({

@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 import TicketChat from '../components/TicketChat';
+import { useNotifications } from '../hooks/useNotifications';
 
 interface Ticket {
   _id: string;
@@ -30,10 +31,16 @@ export default function TicketsPage() {
   const [showForm, setShowForm] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
   const { register, handleSubmit, reset, formState: { errors } } = useForm<NewTicketForm>();
+  const { markRead } = useNotifications();
 
   useEffect(() => {
     fetchTickets();
   }, []);
+
+  const handleSelectTicket = (id: string) => {
+    setSelectedTicket(id);
+    markRead('support');
+  };
 
   const fetchTickets = async () => {
     try {
@@ -159,7 +166,7 @@ export default function TicketsPage() {
               <motion.div
                 key={ticket._id}
                 className="glass rounded-2xl p-5 border border-white/10 cursor-pointer hover:border-indigo-500/30 transition-all duration-200"
-                onClick={() => setSelectedTicket(ticket._id)}
+                onClick={() => handleSelectTicket(ticket._id)}
                 whileHover={{ x: 4 }}
               >
                 <div className="flex items-start justify-between gap-4">
