@@ -54,25 +54,64 @@ app.use('/api/notifications', notificationRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'OK', time: new Date() }));
 
-// Socket.io for real-time tickets
-const connectedUsers = new Map();
+// ── Online user tracking (in-memory) ─────────────────────────────────────────
+// Map<socketId, { userId, name, email, page, lastSeen }>
+const onlineUsers = new Map();
+
+function getOnlineList() {
+  const now = Date.now();
+  return Array.from(onlineUsers.values()).map((u) => {
+    const diffMs = now - new Date(u.lastSeen).getTime();
+    const diffMin = diffMs / 60000;
+    const status = diffMin < 5 ? 'active' : diffMin < 15 ? 'idle' : 'offline';
+    return { ...u, status, lastSeenMs: diffMs };
+  });
+}
+
+function broadcastOnlineUsers() {
+  io.to('admin_room').emit('online_users_update', {
+    users: getOnlineList(),
+    count: onlineUsers.size,
+  });
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 io.on('connection', (socket) => {
-  console.log('Socket connected:', socket.id);
-
   socket.on('join_ticket', ({ ticketId, userId }) => {
     socket.join(`ticket_${ticketId}`);
-    connectedUsers.set(socket.id, { userId, ticketId });
   });
 
-  // User joins their personal room for broadcast notifications
   socket.on('join_user', ({ userId }) => {
     if (userId) socket.join(`user_${userId}`);
   });
 
-  // Admin joins admin room for ticket notifications
   socket.on('join_admin', () => {
     socket.join('admin_room');
+    // Send current snapshot immediately
+    socket.emit('online_users_update', {
+      users: getOnlineList(),
+      count: onlineUsers.size,
+    });
+  });
+
+  // User identifies themselves on connect
+  socket.on('user_connect', ({ userId, name, email, page }) => {
+    if (!userId) return;
+    onlineUsers.set(socket.id, { userId, name, email, page: page || '/', lastSeen: new Date() });
+    broadcastOnlineUsers();
+  });
+
+  // Heartbeat — keeps user alive and updates current page
+  socket.on('heartbeat', ({ userId, page }) => {
+    if (!userId) return;
+    const existing = onlineUsers.get(socket.id);
+    if (existing) {
+      existing.page = page || existing.page;
+      existing.lastSeen = new Date();
+    } else {
+      onlineUsers.set(socket.id, { userId, page: page || '/', lastSeen: new Date() });
+    }
+    broadcastOnlineUsers();
   });
 
   socket.on('send_message', (data) => {
@@ -84,8 +123,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    connectedUsers.delete(socket.id);
-    console.log('Socket disconnected:', socket.id);
+    if (onlineUsers.has(socket.id)) {
+      onlineUsers.delete(socket.id);
+      broadcastOnlineUsers();
+    }
   });
 });
 

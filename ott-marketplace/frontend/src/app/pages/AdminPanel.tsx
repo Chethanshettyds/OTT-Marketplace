@@ -12,6 +12,7 @@ import { PAYMENT_TYPES } from '../utils/paymentTypes';
 import BroadcastModal from '../components/BroadcastModal';
 import FundWalletModal from '../components/FundWalletModal';
 import { useNotifications } from '../hooks/useNotifications';
+import LiveUsersPanel, { OnlineUser } from '../components/LiveUsersPanel';
 
 const TABS = ['Dashboard', 'Products', 'Orders', 'Users', 'Payments', 'Tickets', 'Broadcast', 'Settings'];
 
@@ -91,6 +92,7 @@ export default function AdminPanel() {
   // ── Fund Wallet modal ─────────────────────────────────────────────────────
   const [fundTarget, setFundTarget] = useState<User | null>(null);
   const { counts, markRead } = useNotifications();
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
 
   useEffect(() => { fetchStats(); }, []);
 
@@ -455,37 +457,72 @@ export default function AdminPanel() {
 
           {/* ── Users ── */}
           {activeTab === 'Users' && (
-            <div className="glass rounded-2xl p-6 border border-white/10">
-              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-                <h3 className="text-white font-semibold text-lg">All Users</h3>
-                <div className="flex items-center gap-2 text-white/40 text-xs">
-                  <i className="pi pi-info-circle" /> Click 💰 to add funds to a user's wallet
-                </div>
-              </div>
-              <DataTable value={users} loading={loading} paginator rows={10} emptyMessage="No users">
-                <Column field="name" header="Name" />
-                <Column field="email" header="Email" />
-                <Column header="Wallet" body={(r) => <span className="text-indigo-400 font-bold">₹{(r.walletBalance ?? r.wallet ?? 0).toFixed(2)}</span>} />
-                <Column header="Orders" body={(r) => <span className="text-white/70">{r.orderCount}</span>} />
-                <Column header="Spent" body={(r) => <span className="text-green-400">₹{(r.totalSpent || 0).toFixed(2)}</span>} />
-                <Column header="Joined" body={(r) => <span className="text-white/50 text-sm">{new Date(r.createdAt).toLocaleDateString()}</span>} />
-                <Column header="Status" body={(r) => <Tag value={r.isActive ? 'Active' : 'Banned'} severity={r.isActive ? 'success' : 'danger'} />} />
-                <Column header="Actions" body={(r) => (
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => setFundTarget(r)}
-                      className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-lg transition-colors font-medium"
-                      title="Add funds to wallet"
-                    >
-                      💰 Fund
-                    </button>
-                    <button onClick={() => handleToggleUser(r._id)}
-                      className={`text-xs px-2 py-1 rounded-lg transition-colors ${r.isActive ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'}`}>
-                      {r.isActive ? 'Ban' : 'Unban'}
-                    </button>
+            <div className="space-y-4">
+              {/* Live Users Panel */}
+              <LiveUsersPanel onUsersChange={setOnlineUsers} />
+
+              <div className="glass rounded-2xl p-6 border border-white/10">
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                  <div>
+                    <h3 className="text-white font-semibold text-lg">All Users</h3>
+                    <p className="text-white/40 text-xs mt-0.5">Click 💰 to add funds to a user's wallet</p>
                   </div>
-                )} />
-              </DataTable>
+                </div>
+                <DataTable value={users} loading={loading} paginator rows={10} emptyMessage="No users">
+                  <Column header="Name" body={(r) => {
+                    const isOnline = onlineUsers.some((o) => o.userId === r._id);
+                    const onlineUser = onlineUsers.find((o) => o.userId === r._id);
+                    const status = onlineUser?.status;
+                    return (
+                      <div className="flex items-center gap-2">
+                        <div className="relative">
+                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                            <span className="text-white text-xs font-bold">{r.name?.[0]?.toUpperCase()}</span>
+                          </div>
+                          <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-black ${
+                            status === 'active' ? 'bg-green-400' : status === 'idle' ? 'bg-yellow-400' : 'bg-gray-600'
+                          }`} />
+                        </div>
+                        <span className="text-white text-sm">{r.name}</span>
+                      </div>
+                    );
+                  }} />
+                  <Column field="email" header="Email" />
+                  <Column header="Wallet" body={(r) => <span className="text-indigo-400 font-bold">₹{(r.walletBalance ?? r.wallet ?? 0).toFixed(2)}</span>} />
+                  <Column header="Orders" body={(r) => <span className="text-white/70">{r.orderCount}</span>} />
+                  <Column header="Spent" body={(r) => <span className="text-green-400">₹{(r.totalSpent || 0).toFixed(2)}</span>} />
+                  <Column header="Online Status" body={(r) => {
+                    const onlineUser = onlineUsers.find((o) => o.userId === r._id);
+                    if (!onlineUser) return <span className="text-white/30 text-xs">Offline</span>;
+                    const label = onlineUser.status === 'active' ? '🟢 Active' : onlineUser.status === 'idle' ? '🟡 Idle' : '⚫ Offline';
+                    const page = onlineUser.page;
+                    const pageStr = page.startsWith('/shop') ? 'Shop' : page.startsWith('/checkout') ? 'Checkout' : page.startsWith('/dashboard') ? 'Dashboard' : page.startsWith('/tickets') ? 'Support' : page.replace('/', '') || 'Home';
+                    return (
+                      <div>
+                        <span className="text-xs font-medium">{label}</span>
+                        <p className="text-white/30 text-xs">{pageStr}</p>
+                      </div>
+                    );
+                  }} />
+                  <Column header="Joined" body={(r) => <span className="text-white/50 text-sm">{new Date(r.createdAt).toLocaleDateString()}</span>} />
+                  <Column header="Status" body={(r) => <Tag value={r.isActive ? 'Active' : 'Banned'} severity={r.isActive ? 'success' : 'danger'} />} />
+                  <Column header="Actions" body={(r) => (
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => setFundTarget(r)}
+                        className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-lg transition-colors font-medium"
+                        title="Add funds to wallet"
+                      >
+                        💰 Fund
+                      </button>
+                      <button onClick={() => handleToggleUser(r._id)}
+                        className={`text-xs px-2 py-1 rounded-lg transition-colors ${r.isActive ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'}`}>
+                        {r.isActive ? 'Ban' : 'Unban'}
+                      </button>
+                    </div>
+                  )} />
+                </DataTable>
+              </div>
             </div>
           )}
 

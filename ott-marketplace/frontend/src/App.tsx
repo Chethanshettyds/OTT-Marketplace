@@ -14,9 +14,11 @@ import AdminTicketView from './app/pages/AdminTicketView';
 import BroadcastsPage from './app/pages/BroadcastsPage';
 import CheckoutPage from './app/pages/CheckoutPage';
 import { useAuth } from './app/hooks/useAuth';
+import { useUserActivity } from './app/hooks/useUserActivity';
 
 function AppRoutes() {
   const { isAuthenticated, isAdmin } = useAuth();
+  useUserActivity(); // tracks heartbeat for non-admin users
 
   return (
     <>
