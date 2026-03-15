@@ -10,6 +10,7 @@ import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
 import { PAYMENT_TYPES } from '../utils/paymentTypes';
 import BroadcastModal from '../components/BroadcastModal';
+import FundWalletModal from '../components/FundWalletModal';
 
 const TABS = ['Dashboard', 'Products', 'Orders', 'Users', 'Payments', 'Tickets', 'Broadcast', 'Settings'];
 
@@ -85,6 +86,9 @@ export default function AdminPanel() {
   const [broadcastModalOpen, setBroadcastModalOpen] = useState(false);
 
   const { register, handleSubmit, reset, watch } = useForm<Partial<Product>>();
+
+  // ── Fund Wallet modal ─────────────────────────────────────────────────────
+  const [fundTarget, setFundTarget] = useState<User | null>(null);
 
   useEffect(() => { fetchStats(); }, []);
 
@@ -223,6 +227,13 @@ export default function AdminPanel() {
       toast.success(data.message);
       fetchUsers();
     } catch { toast.error('Failed'); }
+  };
+
+  const handleFundSuccess = (userId: string, newBalance: number) => {
+    setUsers((prev) => prev.map((u) =>
+      u._id === userId ? { ...u, wallet: newBalance, walletBalance: newBalance } : u
+    ));
+    fetchPayments(); // refresh payments table
   };
 
   const statCards = stats ? [
@@ -389,20 +400,34 @@ export default function AdminPanel() {
           {/* ── Users ── */}
           {activeTab === 'Users' && (
             <div className="glass rounded-2xl p-6 border border-white/10">
-              <h3 className="text-white font-semibold text-lg mb-4">All Users</h3>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                <h3 className="text-white font-semibold text-lg">All Users</h3>
+                <div className="flex items-center gap-2 text-white/40 text-xs">
+                  <i className="pi pi-info-circle" /> Click 💰 to add funds to a user's wallet
+                </div>
+              </div>
               <DataTable value={users} loading={loading} paginator rows={10} emptyMessage="No users">
                 <Column field="name" header="Name" />
                 <Column field="email" header="Email" />
-                <Column header="Wallet" body={(r) => <span className="text-indigo-400 font-bold">${(r.walletBalance ?? r.wallet ?? 0).toFixed(2)}</span>} />
+                <Column header="Wallet" body={(r) => <span className="text-indigo-400 font-bold">₹{(r.walletBalance ?? r.wallet ?? 0).toFixed(2)}</span>} />
                 <Column header="Orders" body={(r) => <span className="text-white/70">{r.orderCount}</span>} />
-                <Column header="Spent" body={(r) => <span className="text-green-400">${(r.totalSpent || 0).toFixed(2)}</span>} />
+                <Column header="Spent" body={(r) => <span className="text-green-400">₹{(r.totalSpent || 0).toFixed(2)}</span>} />
                 <Column header="Joined" body={(r) => <span className="text-white/50 text-sm">{new Date(r.createdAt).toLocaleDateString()}</span>} />
                 <Column header="Status" body={(r) => <Tag value={r.isActive ? 'Active' : 'Banned'} severity={r.isActive ? 'success' : 'danger'} />} />
                 <Column header="Actions" body={(r) => (
-                  <button onClick={() => handleToggleUser(r._id)}
-                    className={`text-xs px-2 py-1 rounded-lg transition-colors ${r.isActive ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'}`}>
-                    {r.isActive ? 'Ban' : 'Unban'}
-                  </button>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => setFundTarget(r)}
+                      className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-lg transition-colors font-medium"
+                      title="Add funds to wallet"
+                    >
+                      💰 Fund
+                    </button>
+                    <button onClick={() => handleToggleUser(r._id)}
+                      className={`text-xs px-2 py-1 rounded-lg transition-colors ${r.isActive ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'}`}>
+                      {r.isActive ? 'Ban' : 'Unban'}
+                    </button>
+                  </div>
                 )} />
               </DataTable>
             </div>
@@ -411,14 +436,27 @@ export default function AdminPanel() {
           {/* ── Payments ── */}
           {activeTab === 'Payments' && (
             <div className="glass rounded-2xl p-6 border border-white/10">
-              <h3 className="text-white font-semibold text-lg mb-4">All Payments</h3>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                <h3 className="text-white font-semibold text-lg">All Payments</h3>
+                <button
+                  onClick={() => setActiveTab('Users')}
+                  className="flex items-center gap-2 text-sm px-4 py-2 rounded-xl font-semibold text-white transition-all"
+                  style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
+                >
+                  💰 Add Funds to User
+                </button>
+              </div>
               <DataTable value={payments} loading={loading} paginator rows={10} emptyMessage="No payments">
                 <Column header="User" body={(r) => <span>{r.userName}<br /><span className="text-white/40 text-xs">{r.userEmail}</span></span>} />
-                <Column header="Amount" body={(r) => <span className="text-indigo-400 font-bold">${r.amount?.toFixed(2)}</span>} />
+                <Column header="Amount" body={(r) => (
+                  <span className={`font-bold ${r.type === 'topup' || r.type === 'refund' ? 'text-green-400' : 'text-red-400'}`}>
+                    {r.type === 'purchase' ? '-' : '+'}₹{r.amount?.toFixed(2)}
+                  </span>
+                )} />
                 <Column header="Type" body={(r) => <Tag value={r.type} severity={r.type === 'topup' ? 'success' : r.type === 'refund' ? 'warning' : 'info'} />} />
                 <Column header="Method" body={(r) => <span className="text-white/60 text-xs capitalize">{r.method}</span>} />
                 <Column header="Status" body={(r) => <Tag value={r.status} severity={r.status === 'completed' ? 'success' : r.status === 'refunded' ? 'warning' : 'danger'} />} />
-                <Column header="Txn ID" body={(r) => <span className="text-white/40 text-xs font-mono">{r.transactionId || '—'}</span>} />
+                <Column header="Note" body={(r) => <span className="text-white/40 text-xs">{r.note || '—'}</span>} style={{ maxWidth: '200px' }} />
                 <Column header="Date" body={(r) => <span className="text-white/50 text-sm">{new Date(r.timestamp).toLocaleString()}</span>} />
               </DataTable>
             </div>
@@ -825,6 +863,12 @@ export default function AdminPanel() {
         isOpen={broadcastModalOpen}
         onClose={() => setBroadcastModalOpen(false)}
         onSent={() => { fetchBroadcasts(); setActiveTab('Broadcast'); }}
+      />
+
+      <FundWalletModal
+        user={fundTarget}
+        onClose={() => setFundTarget(null)}
+        onSuccess={handleFundSuccess}
       />
     </div>
   );

@@ -6,6 +6,7 @@ import { useCartStore } from '../store/cartStore';
 import { useAuth } from '../hooks/useAuth';
 import { useAuthStore } from '../store/authStore';
 import { PAYMENT_TYPES } from '../utils/paymentTypes';
+import { useCurrency } from '../hooks/useCurrency';
 import toast from 'react-hot-toast';
 
 interface PaymentMethod {
@@ -35,6 +36,7 @@ export default function CheckoutPage() {
   const subtotal = total();
   const tax = parseFloat((subtotal * TAX_RATE).toFixed(2));
   const grandTotal = parseFloat((subtotal + tax).toFixed(2));
+  const { format } = useCurrency();
 
   useEffect(() => {
     if (items.length === 0 && !success) navigate('/shop');
@@ -107,7 +109,7 @@ export default function CheckoutPage() {
           <h1 className="text-white font-bold text-3xl flex items-center gap-3">
             <i className="pi pi-shopping-cart text-indigo-400" />
             Checkout
-            <span className="text-indigo-400">— ₹{grandTotal.toFixed(2)}</span>
+            <span className="text-indigo-400">— {format(grandTotal)}</span>
           </h1>
         </motion.div>
 
@@ -216,7 +218,7 @@ export default function CheckoutPage() {
                 </div>
                 <div>
                   <p className="text-white/50 text-xs">Wallet Balance</p>
-                  <p className="text-white font-bold text-lg">₹{(user?.wallet ?? 0).toFixed(2)}</p>
+                  <p className="text-white font-bold text-lg">{format(user?.wallet ?? 0)}</p>
                 </div>
               </div>
               {(user?.wallet ?? 0) < grandTotal ? (
@@ -257,7 +259,7 @@ export default function CheckoutPage() {
                       <p className="text-white text-sm font-medium truncate">{item.name}</p>
                       <p className="text-white/40 text-xs">{item.duration}</p>
                     </div>
-                    <span className="text-indigo-400 font-semibold text-sm">₹{item.price}</span>
+                    <span className="text-indigo-400 font-semibold text-sm">{format(item.price)}</span>
                   </div>
                 ))}
               </div>
@@ -266,22 +268,18 @@ export default function CheckoutPage() {
               <div className="p-4 border-t border-white/10 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-white/50">Subtotal</span>
-                  <span className="text-white">₹{subtotal.toFixed(2)}</span>
+                  <span className="text-white">{format(subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-white/50">Tax (18% GST)</span>
-                  <span className="text-white">₹{tax.toFixed(2)}</span>
+                  <span className="text-white">{format(tax)}</span>
                 </div>
                 <div className="h-px bg-white/10 my-2" />
                 <div className="flex justify-between">
                   <span className="text-white font-semibold">Total</span>
-                  <motion.span
-                    key={grandTotal}
-                    initial={{ scale: 1.1, color: '#f97316' }}
-                    animate={{ scale: 1, color: '#f97316' }}
-                    className="font-bold text-xl text-orange-400"
-                  >
-                    ₹{grandTotal.toFixed(2)}
+                  <motion.span key={grandTotal} initial={{ scale: 1.1 }} animate={{ scale: 1 }}
+                    className="font-bold text-xl text-orange-400">
+                    {format(grandTotal)}
                   </motion.span>
                 </div>
               </div>
@@ -299,7 +297,7 @@ export default function CheckoutPage() {
                   {placing ? (
                     <><i className="pi pi-spin pi-spinner" /> Processing...</>
                   ) : (
-                    <><i className="pi pi-lock text-sm" /> Place Order — ₹{grandTotal.toFixed(2)}</>
+                    <><i className="pi pi-lock text-sm" /> Place Order — {format(grandTotal)}</>
                   )}
                 </motion.button>
                 <p className="text-white/20 text-xs text-center mt-2 flex items-center justify-center gap-1">

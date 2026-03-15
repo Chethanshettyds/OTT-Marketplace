@@ -243,8 +243,46 @@ exports.updateOrderStatus = async (req, res) => {
   }
 };
 
-// ─── Payments ────────────────────────────────────────────────────────────────
+// ─── Admin: Fund User Wallet ─────────────────────────────────────────────────
 
+exports.fundUserWallet = async (req, res) => {
+  try {
+    const { amount, reason, reference, note } = req.body;
+    const parsed = parseFloat(amount);
+    if (!parsed || parsed <= 0) return res.status(400).json({ error: 'Enter a valid amount > 0' });
+
+    const user = await User.findById(req.params.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    user.wallet = parseFloat((user.wallet + parsed).toFixed(2));
+    await user.save({ validateBeforeSave: false });
+
+    const txnId = 'ADMIN-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4).toUpperCase();
+    await Payment.create({
+      user: user._id,
+      amount: parsed,
+      method: 'admin',
+      status: 'completed',
+      type: 'topup',
+      transactionId: txnId,
+      note: note || `Admin credit: ${reason || 'Manual Adjustment'}${reference ? ' · Ref: ' + reference : ''}`,
+    });
+
+    // Real-time push
+    const io = req.app.get('io');
+    if (io) io.to(`user_${user._id}`).emit('walletUpdate', { balance: user.wallet });
+
+    res.json({
+      message: `₹${parsed} added to ${user.name}'s wallet`,
+      newBalance: user.wallet,
+      transactionId: txnId,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ─── Payments ────────────────────────────────────────────────────────────────
 exports.listPayments = async (req, res) => {
   try {
     const payments = await Payment.find()

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { platformLetters } from '../utils/threeHelpers';
+import { useCurrency } from '../hooks/useCurrency';
 
 interface Product {
   _id: string;
@@ -27,6 +28,7 @@ interface ProductCard3DProps {
 
 export default function ProductCard3D({ product, onBuy, onAddToCart, inCart }: ProductCard3DProps) {
   const [hovered, setHovered] = useState(false);
+  const { format, currency, formatBoth } = useCurrency();
   const discount = Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100);
   const letter = platformLetters[product.platform] || product.platform[0];
 
@@ -143,14 +145,18 @@ export default function ProductCard3D({ product, onBuy, onAddToCart, inCart }: P
           </div>
 
           {/* Price */}
-          <div className="flex items-center gap-2 mb-4">
-            <span
-              className="text-2xl font-black"
-              style={{ color: product.gradientFrom }}
-            >
-              ${product.price}
+          <div className="flex items-baseline gap-2 mb-4">
+            <span className="text-2xl font-black" style={{ color: product.gradientFrom }}>
+              {format(product.price)}
             </span>
-            <span className="text-white/30 text-sm line-through">${product.originalPrice}</span>
+            {currency !== 'INR' && (
+              <span className="text-white/40 text-xs">
+                ₹{product.price.toLocaleString('en-IN')}
+              </span>
+            )}
+            <span className="text-white/30 text-sm line-through ml-auto">
+              {format(product.originalPrice)}
+            </span>
           </div>
 
           {/* Actions */}

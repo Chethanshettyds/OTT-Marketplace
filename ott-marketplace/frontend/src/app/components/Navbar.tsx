@@ -3,11 +3,15 @@ import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../hooks/useAuth';
 import { useCartStore } from '../store/cartStore';
+import { useCurrency } from '../hooks/useCurrency';
+import { CURRENCIES } from '../utils/currency';
 
 export default function Navbar() {
   const { user, isAuthenticated, isAdmin, logout } = useAuth();
   const { items } = useCartStore();
+  const { currency, setCurrency, format } = useCurrency();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [currencyOpen, setCurrencyOpen] = useState(false);
   const location = useLocation();
 
   const navLinks = isAdmin
@@ -67,7 +71,45 @@ export default function Navbar() {
                 {/* Wallet */}
                 <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-sm">
                   <i className="pi pi-wallet text-indigo-400 text-xs" />
-                  <span className="text-white font-semibold">${user?.wallet?.toFixed(2)}</span>
+                  <span className="text-white font-semibold">{format(user?.wallet ?? 0)}</span>
+                </div>
+                {/* Currency switcher */}
+                <div className="relative hidden sm:block">
+                  <button
+                    onClick={() => setCurrencyOpen(!currencyOpen)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 glass rounded-lg text-sm hover:bg-white/10 transition-colors"
+                  >
+                    <span>{CURRENCIES.find((c) => c.code === currency)?.flag}</span>
+                    <span className="text-white/70 font-medium">{currency}</span>
+                    <i className="pi pi-chevron-down text-white/30 text-xs" />
+                  </button>
+                  <AnimatePresence>
+                    {currencyOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -8 }}
+                        className="absolute right-0 mt-2 w-44 glass rounded-xl border border-white/10 shadow-2xl overflow-hidden z-50"
+                      >
+                        {CURRENCIES.map((c) => (
+                          <button
+                            key={c.code}
+                            onClick={() => { setCurrency(c.code); setCurrencyOpen(false); }}
+                            className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors ${
+                              currency === c.code
+                                ? 'bg-indigo-500/20 text-indigo-300'
+                                : 'text-white/70 hover:text-white hover:bg-white/5'
+                            }`}
+                          >
+                            <span>{c.flag}</span>
+                            <span className="font-medium">{c.symbol}</span>
+                            <span className="text-white/50 text-xs">{c.code}</span>
+                            {currency === c.code && <i className="pi pi-check text-xs ml-auto text-indigo-400" />}
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </>
             )}

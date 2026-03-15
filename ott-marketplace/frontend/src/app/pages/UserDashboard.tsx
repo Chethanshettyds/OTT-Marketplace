@@ -8,6 +8,7 @@ import api from '../utils/api';
 import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
 import { useAuthStore } from '../store/authStore';
+import { useCurrency } from '../hooks/useCurrency';
 
 interface Order {
   _id: string;
@@ -24,6 +25,7 @@ export default function UserDashboard() {
   const { user } = useAuth();
   const { balance } = useWallet();
   const { updateUser } = useAuthStore();
+  const { format } = useCurrency();
   const [activeTab, setActiveTab] = useState('Overview');
   const [walletOpen, setWalletOpen] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -57,7 +59,7 @@ export default function UserDashboard() {
   };
 
   const stats = [
-    { label: 'Wallet Balance', value: `$${(user?.wallet ?? 0).toFixed(2)}`, icon: 'pi-wallet', color: 'from-indigo-500 to-purple-600' },
+    { label: 'Wallet Balance', value: format(user?.wallet ?? 0), icon: 'pi-wallet', color: 'from-indigo-500 to-purple-600' },
     { label: 'Total Orders', value: orders.length || '—', icon: 'pi-shopping-bag', color: 'from-blue-500 to-cyan-500' },
     { label: 'Active Subs', value: orders.filter((o) => o.status === 'delivered').length || '—', icon: 'pi-check-circle', color: 'from-green-500 to-emerald-500' },
     { label: 'Member Since', value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en', { month: 'short', year: 'numeric' }) : '—', icon: 'pi-calendar', color: 'from-orange-500 to-pink-500' },
@@ -145,7 +147,7 @@ export default function UserDashboard() {
                     <i className="pi pi-plus mr-1 text-xs" /> Add Funds
                   </button>
                 </div>
-                <div className="text-4xl font-black text-white mb-1">${(user?.wallet ?? 0).toFixed(2)}</div>
+                <div className="text-4xl font-black text-white mb-1">{format(user?.wallet ?? 0)}</div>
                 <p className="text-white/40 text-sm">Available balance</p>
               </div>
 
@@ -168,7 +170,7 @@ export default function UserDashboard() {
                           <p className="text-white/40 text-xs">{order.orderNumber}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-indigo-400 font-bold">${order.amount}</p>
+                          <p className="text-indigo-400 font-bold">{format(order.amount)}</p>
                           <span className={`text-xs ${order.status === 'delivered' ? 'text-green-400' : order.status === 'pending' ? 'text-yellow-400' : 'text-white/40'}`}>
                             {order.status}
                           </span>
