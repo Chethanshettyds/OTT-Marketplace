@@ -134,26 +134,120 @@ function orderConfirmationMail({ userName, orderNumber, productName, amount, dur
   };
 }
 
-function orderDeliveredMail({ userName, orderNumber, productName, credentials }) {
+function orderDeliveredMail({ userName, orderNumber, productName, amount, duration, credentials }) {
+  const activationDate = new Date().toLocaleString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: true,
+  });
+  const firstName = (userName || 'there').split(' ')[0];
+  const year = new Date().getFullYear();
+
+  // Pick a platform icon based on product name
+  const name = (productName || '').toLowerCase();
+  const platformIcon = name.includes('youtube') ? `<svg width="28" height="20" viewBox="0 0 28 20" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="28" height="20" rx="5" fill="#FF0000"/><polygon points="11,5 11,15 20,10" fill="white"/></svg>`
+    : name.includes('netflix') ? `<svg width="22" height="28" viewBox="0 0 22 28" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="22" height="28" rx="3" fill="#E50914"/><text x="3" y="22" font-size="22" font-weight="900" fill="white" font-family="Arial">N</text></svg>`
+    : name.includes('spotify') ? `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="14" fill="#1DB954"/><path d="M8 10.5c3.5-1 7.5-1 11 0.5M8 14c3-0.8 6.5-0.8 10 0.5M9 17.5c2.5-0.6 5-0.6 8 0.3" stroke="white" stroke-width="1.8" stroke-linecap="round"/></svg>`
+    : name.includes('disney') ? `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="14" fill="#113CCF"/><text x="4" y="20" font-size="13" font-weight="900" fill="white" font-family="Arial">D+</text></svg>`
+    : name.includes('amazon') || name.includes('prime') ? `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="14" fill="#00A8E0"/><text x="5" y="20" font-size="11" font-weight="900" fill="white" font-family="Arial">prime</text></svg>`
+    : `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="14" fill="rgba(16,185,129,0.3)"/><polygon points="10,8 10,20 22,14" fill="#10b981"/></svg>`;
+
   return {
-    subject: `Your ${productName} credentials are ready 🎉`,
-    html: `
-      <div style="font-family:sans-serif;max-width:520px;margin:auto;background:#0f0f1a;color:#e2e8f0;border-radius:12px;overflow:hidden">
-        <div style="background:linear-gradient(135deg,#10b981,#059669);padding:28px 32px">
-          <h1 style="margin:0;font-size:22px;color:#fff">🎉 Subscription Delivered</h1>
-          <p style="margin:6px 0 0;color:rgba(255,255,255,0.7);font-size:14px">OTTMarket</p>
-        </div>
-        <div style="padding:28px 32px">
-          <p style="margin:0 0 16px">Hi <strong>${userName}</strong>,</p>
-          <p style="margin:0 0 20px;color:#94a3b8">Your <strong>${productName}</strong> subscription (Order #${orderNumber}) has been delivered.</p>
+    subject: `✅ ${productName} Activated – Your subscription is LIVE!`,
+    html: `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Subscription Activated</title>
+</head>
+<body style="margin:0;padding:0;background:linear-gradient(135deg,#052e16 0%,#14532d 50%,#1e1b4b 100%);font-family:'Segoe UI',Arial,sans-serif;min-height:100vh">
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px">
+  <tr><td align="center">
+    <table width="100%" style="max-width:600px;background:rgba(255,255,255,0.05);border-radius:24px;border:1px solid rgba(255,255,255,0.1);overflow:hidden;box-shadow:0 32px 64px rgba(0,0,0,0.4)">
+
+      <!-- HEADER -->
+      <tr>
+        <td style="background:linear-gradient(135deg,#10b981 0%,#059669 100%);padding:36px 32px;text-align:center">
+          <div style="margin-bottom:12px">
+            <svg width="52" height="52" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block">
+              <rect width="52" height="52" rx="14" fill="rgba(255,255,255,0.2)"/>
+              <circle cx="26" cy="26" r="14" fill="none" stroke="white" stroke-width="2.5"/>
+              <polyline points="19,26 24,31 33,21" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div style="font-size:26px;font-weight:800;color:#ffffff;letter-spacing:-0.5px">OTTMARKET</div>
+          <h1 style="margin:10px 0 0;font-size:24px;font-weight:700;color:#ffffff">Subscription Activated!</h1>
+          <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:15px">Your service is now LIVE and ready to use</p>
+        </td>
+      </tr>
+
+      <!-- BODY -->
+      <tr>
+        <td style="padding:32px">
+
+          <!-- Greeting -->
+          <p style="margin:0 0 24px;font-size:16px;color:#e2e8f0">Hi <strong style="color:#ffffff">${firstName}</strong>, great news — your subscription has been activated!</p>
+
+          <!-- Service card -->
+          <div style="background:linear-gradient(135deg,rgba(16,185,129,0.12) 0%,rgba(5,150,105,0.12) 100%);border:1px solid rgba(16,185,129,0.3);border-radius:16px;padding:24px;margin-bottom:24px">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="vertical-align:middle">
+                  <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#6ee7b7;text-transform:uppercase;letter-spacing:1.5px">Now Active</p>
+                  <p style="margin:0;font-size:20px;font-weight:800;color:#10b981">${productName}</p>
+                  ${duration ? `<p style="margin:4px 0 0;font-size:13px;color:rgba(255,255,255,0.55)">${duration} subscription</p>` : ''}
+                </td>
+                <td style="text-align:right;vertical-align:middle;padding-left:16px">${platformIcon}</td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- Order details -->
+          <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:12px;padding:16px 20px;margin-bottom:24px">
+            <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#6ee7b7;text-transform:uppercase;letter-spacing:1.5px">Order Reference</p>
+            <p style="margin:0;font-size:17px;font-weight:700;color:#a7f3d0;font-family:'Courier New',monospace">${orderNumber}</p>
+            <p style="margin:4px 0 0;font-size:12px;color:rgba(255,255,255,0.4)">Activated on ${activationDate}</p>
+            ${amount ? `<p style="margin:8px 0 0;font-size:13px;color:rgba(255,255,255,0.5)">Amount paid: <strong style="color:#10b981">₹${amount}</strong></p>` : ''}
+          </div>
+
           ${credentials ? `
-          <div style="background:#1e1e2e;border-radius:8px;padding:16px 20px;margin-bottom:20px;border-left:3px solid #10b981">
-            <p style="margin:0 0 8px;font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:1px">Credentials</p>
-            <pre style="margin:0;color:#e2e8f0;font-size:14px;white-space:pre-wrap">${credentials}</pre>
+          <!-- Credentials -->
+          <div style="background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.3);border-radius:12px;padding:20px;margin-bottom:24px">
+            <p style="margin:0 0 12px;font-size:11px;font-weight:700;color:#a855f7;text-transform:uppercase;letter-spacing:1.5px">🔐 Your Credentials</p>
+            <pre style="margin:0;color:#e2e8f0;font-size:14px;white-space:pre-wrap;font-family:'Courier New',monospace;line-height:1.6">${credentials}</pre>
+            <p style="margin:12px 0 0;font-size:11px;color:rgba(255,255,255,0.3)">Keep these safe. Do not share with anyone.</p>
           </div>` : ''}
-          <p style="font-size:12px;color:#475569;margin:0">Keep these credentials safe. Do not share them.</p>
-        </div>
-      </div>`,
+
+          <!-- CTA -->
+          <div style="background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.25);border-radius:12px;padding:20px 24px;text-align:center;margin-bottom:24px">
+            <p style="margin:0 0 6px;font-size:16px;font-weight:700;color:#a855f7">🎬 Start Streaming Now</p>
+            <p style="margin:0 0 14px;font-size:13px;color:rgba(255,255,255,0.5)">Head to your dashboard to view all active subscriptions</p>
+            <a href="${process.env.CLIENT_URL || 'http://localhost:5173'}/dashboard" style="display:inline-block;background:linear-gradient(135deg,#8b5cf6,#a855f7);color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:50px;font-size:14px;font-weight:700;box-shadow:0 6px 20px rgba(139,92,246,0.35)">
+              → Go to Dashboard
+            </a>
+          </div>
+
+          <!-- Support -->
+          <p style="margin:0;font-size:13px;color:rgba(255,255,255,0.35);text-align:center">
+            Need help? <a href="mailto:support@ottmarket.com" style="color:#10b981;text-decoration:none;font-weight:600">Contact Support</a> or open a ticket on OTTMarket.
+          </p>
+
+        </td>
+      </tr>
+
+      <!-- FOOTER -->
+      <tr>
+        <td style="background:rgba(0,0,0,0.25);padding:20px 32px;text-align:center;border-top:1px solid rgba(255,255,255,0.06)">
+          <p style="margin:0 0 4px;font-size:12px;color:rgba(255,255,255,0.3)">© ${year} OTTMARKET. All rights reserved.</p>
+          <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.15)">You received this because your order was fulfilled on OTTMarket.</p>
+        </td>
+      </tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`,
   };
 }
 

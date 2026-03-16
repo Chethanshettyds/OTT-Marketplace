@@ -554,8 +554,8 @@ export default function AdminPanel() {
                               <div className="flex gap-1 flex-wrap">
                                 {r.status !== 'cancelled' && r.status !== 'delivered' && (
                                   <button onClick={() => handleOrderStatus(r._id, 'delivered')}
-                                    className="text-xs px-2.5 py-1 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/25 transition-colors">
-                                    Deliver
+                                    className="text-xs px-2.5 py-1 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/25 transition-colors flex items-center gap-1">
+                                    <i className="pi pi-check-circle text-xs" /> Mark Complete
                                   </button>
                                 )}
                                 {r.status !== 'cancelled' && (

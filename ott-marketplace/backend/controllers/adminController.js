@@ -4,7 +4,7 @@ const { PLATFORM_THEMES, PLATFORM_SERVICES } = require('../models/Product');
 const Order = require('../models/Order');
 const Payment = require('../models/Payment');
 const { body, validationResult } = require('express-validator');
-const { sendMail, walletTopupMail } = require('../utils/mailer');
+const { sendMail, walletTopupMail, orderDeliveredMail } = require('../utils/mailer');
 
 // Apply auto-theme + default services if not manually provided
 function applyAutoTheme(body) {
@@ -269,6 +269,23 @@ exports.updateOrderStatus = async (req, res) => {
       .populate('product', 'name platform');
 
     res.json({ order: updated });
+
+    // Send activation email when admin marks delivered (non-blocking)
+    if (status === 'delivered' && updated?.user?.email) {
+      sendMail({
+        to: updated.user.email,
+        ...orderDeliveredMail({
+          userName: updated.user.name,
+          orderNumber: updated.orderNumber,
+          productName: updated.productSnapshot?.name,
+          amount: updated.amount,
+          duration: updated.productSnapshot?.duration,
+          credentials: credentials
+            ? `${credentials.email ? 'Email: ' + credentials.email + '\n' : ''}${credentials.password ? 'Password: ' + credentials.password : ''}${credentials.notes ? '\nNotes: ' + credentials.notes : ''}`.trim()
+            : null,
+        }),
+      }).catch(() => {});
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
