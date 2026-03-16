@@ -4,26 +4,27 @@ const { Resend } = require('resend');
 // ── Resend (HTTPS API — works on Render free tier) ────────────────────────────
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
-// ── Nodemailer fallback (local dev only) ──────────────────────────────────────
+// ── Nodemailer (Gmail via App Password — works on Render) ─────────────────────
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
-  port: 587,
-  secure: false,
+  port: 465,
+  secure: true, // SSL — more reliable than STARTTLS on cloud hosts
   auth: {
     user: process.env.NODEMAILER_USER,
     pass: process.env.NODEMAILER_PASS,
   },
-  tls: { rejectUnauthorized: false },
 });
 
-// Verify nodemailer only in dev
-if (!resend) {
+// Verify on startup — prefer nodemailer if credentials are set
+if (process.env.NODEMAILER_USER && process.env.NODEMAILER_PASS) {
   transporter.verify((err) => {
-    if (err) console.error('❌ Mailer error:', err.message);
-    else console.log('✅ Mailer ready (nodemailer)');
+    if (err) console.error('❌ Mailer error (nodemailer):', err.message);
+    else console.log('✅ Mailer ready (nodemailer/Gmail)');
   });
-} else {
+} else if (resend) {
   console.log('✅ Mailer ready (Resend)');
+} else {
+  console.warn('⚠️  No mailer configured — emails will be skipped');
 }
 
 /**
@@ -31,19 +32,22 @@ if (!resend) {
  * Uses Resend in production, nodemailer in dev
  */
 async function sendMail({ to, subject, html }) {
+  // Prefer nodemailer (Gmail) if configured — Resend sandbox only sends to owner email
+  if (process.env.NODEMAILER_USER && process.env.NODEMAILER_PASS) {
+    return transporter.sendMail({
+      from: process.env.NODEMAILER_FROM || `OTTMarket <${process.env.NODEMAILER_USER}>`,
+      to,
+      subject,
+      html,
+    });
+  }
   if (resend) {
     const from = process.env.RESEND_FROM || 'OTTMarket <onboarding@resend.dev>';
     const { error } = await resend.emails.send({ from, to, subject, html });
     if (error) throw new Error(error.message);
     return;
   }
-  // fallback: nodemailer
-  return transporter.sendMail({
-    from: process.env.NODEMAILER_FROM || `OTTMarket <${process.env.NODEMAILER_USER}>`,
-    to,
-    subject,
-    html,
-  });
+  console.warn('⚠️  sendMail called but no mailer configured — skipping');
 }
 
 // ── Pre-built templates ───────────────────────────────────────────────────────
