@@ -16,6 +16,9 @@ const userRoutes = require('./routes/user');
 const broadcastRoutes = require('./routes/broadcast');
 const notificationRoutes = require('./routes/notifications');
 
+// Init mailer (logs ✅ or ❌ on startup)
+require('./utils/mailer');
+
 const app = express();
 const server = http.createServer(app);
 

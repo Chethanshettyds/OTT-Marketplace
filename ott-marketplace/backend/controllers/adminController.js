@@ -4,6 +4,7 @@ const { PLATFORM_THEMES, PLATFORM_SERVICES } = require('../models/Product');
 const Order = require('../models/Order');
 const Payment = require('../models/Payment');
 const { body, validationResult } = require('express-validator');
+const { sendMail, walletTopupMail } = require('../utils/mailer');
 
 // Apply auto-theme + default services if not manually provided
 function applyAutoTheme(body) {
@@ -295,6 +296,17 @@ exports.fundUserWallet = async (req, res) => {
       newBalance: user.wallet,
       transactionId: txnId,
     });
+
+    // Send topup email (non-blocking)
+    sendMail({
+      to: user.email,
+      ...walletTopupMail({
+        userName: user.name,
+        amount: parsed,
+        newBalance: user.wallet,
+        transactionId: txnId,
+      }),
+    }).catch(() => {});
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

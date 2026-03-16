@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { sendMail, welcomeMail } = require('../utils/mailer');
 
 const generateToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
@@ -25,6 +26,20 @@ exports.register = async (req, res) => {
     const user = await User.create({ name, email, password, role });
     const token = generateToken(user._id);
     res.status(201).json({ token, user });
+
+    // Send welcome email (non-blocking — never delays the response)
+    sendMail({
+      to: user.email,
+      ...welcomeMail({
+        userName: user.name,
+        email: user.email,
+        shopUrl: `${process.env.CLIENT_URL || 'http://localhost:5173'}/shop`,
+      }),
+    }).then(() => {
+      console.log(`📧 Welcome email sent to ${user.email}`);
+    }).catch((err) => {
+      console.error(`❌ Welcome email failed for ${user.email}:`, err.message);
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

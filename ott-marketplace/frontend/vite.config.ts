@@ -9,12 +9,15 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:5000',
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('error', () => {});
+        },
       },
       '/socket.io': {
         target: 'http://localhost:5000',
         ws: true,
         configure: (proxy) => {
-          proxy.on('error', () => {}); // suppress ECONNABORTED noise
+          proxy.on('error', () => {});
         },
       },
     },

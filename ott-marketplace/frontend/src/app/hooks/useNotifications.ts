@@ -70,7 +70,14 @@ export function useNotifications() {
     pollRef.current = setInterval(fetchCounts, 30_000);
 
     if (!socketRef) {
-      socketRef = io('/', { path: '/socket.io', transports: ['websocket'] });
+      socketRef = io('/', {
+        path: '/socket.io',
+        transports: ['websocket'],
+        reconnectionAttempts: 5,
+        reconnectionDelay: 2000,
+        reconnectionDelayMax: 30000,
+        timeout: 10000,
+      });
     }
 
     if (isAdmin) {

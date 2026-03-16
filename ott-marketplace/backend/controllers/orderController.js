@@ -2,6 +2,7 @@ const Order = require('../models/Order');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const Payment = require('../models/Payment');
+const { sendMail, orderConfirmationMail, orderDeliveredMail } = require('../utils/mailer');
 
 exports.createOrder = async (req, res) => {
   try {
@@ -57,6 +58,18 @@ exports.createOrder = async (req, res) => {
     });
 
     res.status(201).json({ order, newBalance: user.wallet });
+
+    // Send confirmation email (non-blocking)
+    sendMail({
+      to: user.email,
+      ...orderConfirmationMail({
+        userName: user.name,
+        orderNumber: order.orderNumber,
+        productName: product.name,
+        amount: product.price,
+        duration: product.duration,
+      }),
+    }).catch(() => {});
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -121,6 +134,19 @@ exports.updateOrderStatus = async (req, res) => {
       .populate('product', 'name platform');
 
     res.json({ order: updated });
+
+    // Send delivery email (non-blocking)
+    if (status === 'delivered' && updated?.user?.email) {
+      sendMail({
+        to: updated.user.email,
+        ...orderDeliveredMail({
+          userName: updated.user.name,
+          orderNumber: updated.orderNumber,
+          productName: updated.productSnapshot?.name,
+          credentials: credentials || null,
+        }),
+      }).catch(() => {});
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

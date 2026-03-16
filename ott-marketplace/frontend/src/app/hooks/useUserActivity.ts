@@ -15,7 +15,14 @@ export function useUserActivity() {
     if (!isAuthenticated || !user?._id || isAdmin) return;
 
     if (!activitySocket) {
-      activitySocket = io('/', { path: '/socket.io', transports: ['websocket'] });
+      activitySocket = io('/', {
+        path: '/socket.io',
+        transports: ['websocket'],
+        reconnectionAttempts: 5,
+        reconnectionDelay: 2000,
+        reconnectionDelayMax: 30000,
+        timeout: 10000,
+      });
     }
 
     const emit = (page: string) => {
