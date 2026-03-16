@@ -24,13 +24,16 @@ const server = http.createServer(app);
 
 const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
   .split(',')
-  .map((o) => o.trim());
+  .map((o) => o.trim().replace(/\/$/, '')); // strip trailing slashes
 
 const corsOptions = {
   origin: (origin, cb) => {
-    // Allow requests with no origin (mobile apps, curl, server-to-server)
-    if (!origin) return cb(null, true);
-    if (allowedOrigins.includes(origin)) return cb(null, true);
+    if (!origin) return cb(null, true); // server-to-server / curl
+    const clean = origin.replace(/\/$/, '');
+    if (allowedOrigins.includes(clean)) return cb(null, true);
+    // In development allow any localhost
+    if (process.env.NODE_ENV !== 'production' && clean.startsWith('http://localhost')) return cb(null, true);
+    console.warn(`CORS blocked: ${origin}`);
     cb(new Error(`CORS: origin ${origin} not allowed`));
   },
   credentials: true,
