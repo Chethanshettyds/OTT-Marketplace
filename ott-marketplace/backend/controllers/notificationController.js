@@ -1,5 +1,4 @@
 const Notification = require('../models/Notification');
-const User = require('../models/User');
 
 // GET /api/notifications/counts
 exports.getCounts = async (req, res) => {
