@@ -1,26 +1,15 @@
-const nodemailer = require('nodemailer');
+const https = require('https');
 const { Resend } = require('resend');
 
-// ── Resend (HTTPS API — works on Render free tier) ────────────────────────────
+// ── Brevo (HTTPS API — works on Render free tier, sends to any email) ─────────
+// Sign up free at app.brevo.com → SMTP & API → API Keys
+// Set BREVO_API_KEY in Render env vars
+
+// ── Resend fallback ────────────────────────────────────────────────────────────
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
-// ── Nodemailer (Gmail via App Password — works on Render) ─────────────────────
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true, // SSL — more reliable than STARTTLS on cloud hosts
-  auth: {
-    user: process.env.NODEMAILER_USER,
-    pass: process.env.NODEMAILER_PASS,
-  },
-});
-
-// Verify on startup — prefer nodemailer if credentials are set
-if (process.env.NODEMAILER_USER && process.env.NODEMAILER_PASS) {
-  transporter.verify((err) => {
-    if (err) console.error('❌ Mailer error (nodemailer):', err.message);
-    else console.log('✅ Mailer ready (nodemailer/Gmail)');
-  });
+if (process.env.BREVO_API_KEY) {
+  console.log('✅ Mailer ready (Brevo)');
 } else if (resend) {
   console.log('✅ Mailer ready (Resend)');
 } else {
@@ -29,24 +18,51 @@ if (process.env.NODEMAILER_USER && process.env.NODEMAILER_PASS) {
 
 /**
  * sendMail({ to, subject, html })
- * Uses Resend in production, nodemailer in dev
+ * Priority: Brevo → Resend → skip
  */
 async function sendMail({ to, subject, html }) {
-  // Prefer nodemailer (Gmail) if configured — Resend sandbox only sends to owner email
-  if (process.env.NODEMAILER_USER && process.env.NODEMAILER_PASS) {
-    return transporter.sendMail({
-      from: process.env.NODEMAILER_FROM || `OTTMarket <${process.env.NODEMAILER_USER}>`,
-      to,
+  // 1. Brevo HTTPS API (works on Render free tier, sends to any email)
+  if (process.env.BREVO_API_KEY) {
+    const fromEmail = process.env.BREVO_FROM_EMAIL || 'noreply@ottmarket.com';
+    const fromName = process.env.BREVO_FROM_NAME || 'OTTMarket';
+    const payload = JSON.stringify({
+      sender: { name: fromName, email: fromEmail },
+      to: [{ email: to }],
       subject,
-      html,
+      htmlContent: html,
+    });
+    return new Promise((resolve, reject) => {
+      const req = https.request({
+        hostname: 'api.brevo.com',
+        path: '/v3/smtp/email',
+        method: 'POST',
+        headers: {
+          'api-key': process.env.BREVO_API_KEY,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload),
+        },
+      }, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) resolve();
+          else reject(new Error(`Brevo error ${res.statusCode}: ${data}`));
+        });
+      });
+      req.on('error', reject);
+      req.write(payload);
+      req.end();
     });
   }
+
+  // 2. Resend fallback (only works if domain verified or sending to account owner)
   if (resend) {
     const from = process.env.RESEND_FROM || 'OTTMarket <onboarding@resend.dev>';
     const { error } = await resend.emails.send({ from, to, subject, html });
     if (error) throw new Error(error.message);
     return;
   }
+
   console.warn('⚠️  sendMail called but no mailer configured — skipping');
 }
 
