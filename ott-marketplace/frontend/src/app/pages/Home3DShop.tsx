@@ -29,7 +29,7 @@ const SORT_OPTIONS = [
 ];
 
 const CATEGORY_ICONS: Record<string, string> = {
-  Video: '📺', Music: '🎵', Gaming: '🎮', Bundle: '📦', All: '✨',
+  All: 'pi-th-large', Video: 'pi-video', Music: 'pi-headphones', Gaming: 'pi-desktop', Bundle: 'pi-box',
 };
 
 // ─── Shared product fetcher ───────────────────────────────────────────────────
@@ -429,7 +429,7 @@ function UserShop({ products, loading }: { products: Product[]; loading: boolean
                   : 'glass text-white/60 hover:text-white'
               }`}
             >
-              <span>{CATEGORY_ICONS[cat]}</span> {cat}
+              <i className={`pi ${CATEGORY_ICONS[cat]} text-sm`} /> {cat}
             </button>
           ))}
         </div>
