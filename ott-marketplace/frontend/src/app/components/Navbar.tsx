@@ -123,17 +123,9 @@ export default function Navbar() {
           {/* Right side */}
           <div className="flex items-center gap-3">
 
-            {/* User-only: cart + wallet + currency */}
+            {/* User-only: wallet + currency */}
             {isAuthenticated && !isAdmin && (
               <>
-                <Link to="/shop" className="relative p-2 text-white/70 hover:text-white transition-colors">
-                  <i className="pi pi-shopping-cart text-lg" />
-                  {items.length > 0 && (
-                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-indigo-500 rounded-full text-xs flex items-center justify-center text-white font-bold">
-                      {items.length}
-                    </span>
-                  )}
-                </Link>
                 <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-sm">
                   <i className="pi pi-wallet text-indigo-400 text-xs" />
                   <span className="text-white font-semibold">{format(user?.wallet ?? 0)}</span>

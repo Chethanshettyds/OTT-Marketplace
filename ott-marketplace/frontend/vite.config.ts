@@ -1,6 +1,13 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+const suppressProxyErrors = (proxy: any) => {
+  proxy.on('error', () => {});
+  proxy.on('proxyReqWs', (_proxyReq: any, _req: any, socket: any) => {
+    socket.on('error', () => {});
+  });
+};
+
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -9,16 +16,12 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:5000',
         changeOrigin: true,
-        configure: (proxy) => {
-          proxy.on('error', () => {});
-        },
+        configure: suppressProxyErrors,
       },
       '/socket.io': {
         target: 'http://localhost:5000',
         ws: true,
-        configure: (proxy) => {
-          proxy.on('error', () => {});
-        },
+        configure: suppressProxyErrors,
       },
     },
   },

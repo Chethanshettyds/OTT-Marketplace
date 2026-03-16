@@ -19,6 +19,7 @@ router.delete('/products/:id', ctrl.deleteProduct);
 router.get('/users', ctrl.listUsers);
 router.get('/users/:id', ctrl.getUser);
 router.put('/users/:id/toggle', ctrl.toggleUserActive);
+router.delete('/users/:id', ctrl.deleteUser);
 router.post('/users/:userId/fund', ctrl.fundUserWallet);
 
 // ── Orders ─────────────────────────────────────────────────────────────────

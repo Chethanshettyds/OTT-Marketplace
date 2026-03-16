@@ -202,6 +202,18 @@ exports.toggleUserActive = async (req, res) => {
   }
 };
 
+exports.deleteUser = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.role === 'admin') return res.status(403).json({ error: 'Cannot delete admin accounts' });
+    await User.findByIdAndDelete(req.params.id);
+    res.json({ message: `User ${user.name} deleted permanently` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 // ─── Orders ──────────────────────────────────────────────────────────────────
 
 exports.listOrders = async (req, res) => {

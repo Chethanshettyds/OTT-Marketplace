@@ -271,6 +271,15 @@ export default function AdminPanel() {
     } catch { toast.error('Failed'); }
   };
 
+  const handleDeleteUser = async (id: string, name: string) => {
+    if (!confirm(`Permanently delete user "${name}"? This cannot be undone.`)) return;
+    try {
+      const { data } = await api.delete(`/admin/users/${id}`);
+      toast.success(data.message);
+      setUsers((prev) => prev.filter((u) => u._id !== id));
+    } catch (err: any) { toast.error(err.response?.data?.error || 'Delete failed'); }
+  };
+
   const handleStockUpdate = async (id: string, stock: number) => {
     try {
       const { data } = await api.patch(`/products/${id}/stock`, { stock });
@@ -628,6 +637,13 @@ export default function AdminPanel() {
                       <button onClick={() => handleToggleUser(r._id)}
                         className={`text-xs px-2 py-1 rounded-lg transition-colors ${r.isActive ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'}`}>
                         {r.isActive ? 'Ban' : 'Unban'}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteUser(r._id, r.name)}
+                        className="text-xs px-2 py-1 rounded-lg bg-rose-900/30 text-rose-400 hover:bg-rose-500/30 transition-colors"
+                        title="Delete user permanently"
+                      >
+                        <i className="pi pi-trash text-xs" />
                       </button>
                     </div>
                   )} />
