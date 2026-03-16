@@ -193,7 +193,7 @@ function GuestShop({ products, loading }: { products: Product[]; loading: boolea
                   style={{ background: `linear-gradient(135deg, ${p.gradientFrom}, ${p.gradientTo})` }}>
                   {p.imageUrl
                     ? <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
-                    : <span>{p.platform[0]}</span>
+                    : <span>{p.platform?.[0] ?? '?'}</span>
                   }
                   <div className="absolute top-2 left-2 bg-green-400 text-black text-xs font-bold px-2 py-0.5 rounded-full">
                     -{Math.round(((p.originalPrice - p.price) / p.originalPrice) * 100)}%
@@ -361,7 +361,7 @@ function UserShop({ products, loading }: { products: Product[]; loading: boolean
                     style={{ background: `linear-gradient(135deg, ${p.gradientFrom}, ${p.gradientTo})` }}>
                     {p.imageUrl
                       ? <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
-                      : p.platform[0]
+                      : p.platform?.[0] ?? '?'
                     }
                     <div className="absolute top-1.5 left-1.5 bg-orange-400 text-black text-xs font-bold px-1.5 py-0.5 rounded-full">
                       HOT

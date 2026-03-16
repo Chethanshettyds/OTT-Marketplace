@@ -1,4 +1,4 @@
-import { Suspense, useRef, Component, ReactNode } from 'react';
+import { Suspense, useRef, useMemo, Component, ReactNode } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Stars, Environment, Float } from '@react-three/drei';
 import * as THREE from 'three';
@@ -33,23 +33,29 @@ function CameraRig() {
 function ParticleField() {
   const ref = useRef<THREE.Points>(null);
   const count = 300;
-  const positions = new Float32Array(count * 3);
-  for (let i = 0; i < count; i++) {
-    positions[i * 3] = (Math.random() - 0.5) * 30;
-    positions[i * 3 + 1] = (Math.random() - 0.5) * 20;
-    positions[i * 3 + 2] = (Math.random() - 0.5) * 20;
-  }
+  const positions = useMemo(() => {
+    const arr = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      arr[i * 3]     = (Math.random() - 0.5) * 30;
+      arr[i * 3 + 1] = (Math.random() - 0.5) * 20;
+      arr[i * 3 + 2] = (Math.random() - 0.5) * 20;
+    }
+    return arr;
+  }, []);
 
   useFrame((state) => {
-    if (ref.current) {
-      ref.current.rotation.y = state.clock.elapsedTime * 0.02;
-    }
+    if (ref.current) ref.current.rotation.y = state.clock.elapsedTime * 0.02;
   });
 
   return (
     <points ref={ref}>
       <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+        <bufferAttribute
+          attach="attributes-position"
+          array={positions}
+          count={count}
+          itemSize={3}
+        />
       </bufferGeometry>
       <pointsMaterial size={0.05} color="#6366f1" transparent opacity={0.6} sizeAttenuation />
     </points>
@@ -69,6 +75,9 @@ interface Scene3DProps {
 }
 
 export default function Scene3D({ products, onSelect, height = '600px' }: Scene3DProps) {
+  // Don't mount the canvas until we have products — avoids crash on empty array
+  if (!products || products.length === 0) return <div style={{ height, width: '100%' }} />;
+
   return (
     <div style={{ height, width: '100%' }}>
       <CanvasErrorBoundary>

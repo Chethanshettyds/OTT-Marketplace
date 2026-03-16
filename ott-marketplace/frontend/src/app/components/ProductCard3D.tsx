@@ -52,7 +52,7 @@ export default function ProductCard3D({ product, onBuy, onAddToCart, inCart }: P
   const [joining, setJoining] = useState(false);
 
   const discount = Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100);
-  const letter = platformLetters[product.platform] || product.platform[0];
+  const letter = platformLetters[product.platform] || (product.platform?.[0] ?? '?');
   const stockStatus = getStockStatus(product);
   const isOutOfStock = stockStatus === 'out_of_stock';
   const isLowStock = stockStatus === 'low_stock';

@@ -45,7 +45,7 @@ function SubCard({ position, platform, price, colorFrom, colorTo, index, onClick
     }
   });
 
-  const letter = platformLetters[platform] || platform[0];
+  const letter = platformLetters[platform] || (platform && platform.length > 0 ? platform[0] : '?');
 
   return (
     <group position={position} onClick={onClick}>
