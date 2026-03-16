@@ -22,10 +22,6 @@ npm install
 npm run dev       # Starts on http://localhost:5173
 ```
 
-## Demo Accounts
-- **Admin:** admin@site.com / admin123
-- **User:** user@site.com / user123
-
 ## Features
 - 3D orbiting subscription cards (Three.js / R3F)
 - Glassmorphism dark UI with neon gradients
