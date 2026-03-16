@@ -38,7 +38,7 @@ exports.register = async (req, res) => {
     }).then(() => {
       console.log(`📧 Welcome email sent to ${user.email}`);
     }).catch((err) => {
-      console.error(`❌ Welcome email failed for ${user.email}:`, err.message);
+      console.error(`❌ Welcome email failed for ${user.email}:`, err.message, err.stack);
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
