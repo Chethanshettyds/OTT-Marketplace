@@ -22,6 +22,10 @@ require('./utils/mailer');
 const app = express();
 const server = http.createServer(app);
 
+// Render sits behind a proxy — trust the first hop so rate-limit
+// can read the real client IP from X-Forwarded-For
+app.set('trust proxy', 1);
+
 const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
   .split(',')
   .map((o) => o.trim().replace(/\/$/, '')); // strip trailing slashes
