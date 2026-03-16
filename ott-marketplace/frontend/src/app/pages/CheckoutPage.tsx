@@ -1,42 +1,46 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../utils/api';
 import { useCartStore } from '../store/cartStore';
 import { useAuth } from '../hooks/useAuth';
 import { useAuthStore } from '../store/authStore';
+import { useWallet } from '../hooks/useWallet';
 import { PAYMENT_TYPES } from '../utils/paymentTypes';
-import { useCurrency } from '../hooks/useCurrency';
 import toast from 'react-hot-toast';
 
 interface PaymentMethod {
-  _id: string;
-  type: string;
-  label: string;
-  upiId: string;
-  qrCodeUrl: string;
-  accountDetails: string;
-  isDefault: boolean;
+  _id: string; type: string; label: string;
+  upiId: string; qrCodeUrl: string; accountDetails: string; isDefault: boolean;
 }
 
 const TAX_RATE = 0.18;
+const QUICK_AMOUNTS = [50, 100, 200, 500];
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const { items, clearCart, total } = useCartStore();
   const { user } = useAuth();
   const { updateUser } = useAuthStore();
+  const { fetchBalance } = useWallet();
 
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [loadingMethods, setLoadingMethods] = useState(true);
-  const [selectedMethod, setSelectedMethod] = useState<string>('');
   const [placing, setPlacing] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [rechargeOpen, setRechargeOpen] = useState(false);
+  const [rechargeAmount, setRechargeAmount] = useState(100);
+  const [customAmount, setCustomAmount] = useState('');
+  const [txnId, setTxnId] = useState('');
+  const [rechargeMethod, setRechargeMethod] = useState('upi');
+  const [recharging, setRecharging] = useState(false);
 
   const subtotal = total();
   const tax = parseFloat((subtotal * TAX_RATE).toFixed(2));
   const grandTotal = parseFloat((subtotal + tax).toFixed(2));
-  const { format } = useCurrency();
+  const walletBalance = user?.wallet ?? 0;
+  const hasSufficientFunds = walletBalance >= grandTotal;
+  const shortfall = parseFloat((grandTotal - walletBalance).toFixed(2));
 
   useEffect(() => {
     if (items.length === 0 && !success) navigate('/shop');
@@ -44,30 +48,33 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     api.get('/wallet/payment-methods')
-      .then(({ data }) => {
-        setMethods(data.paymentMethods);
-        const def = data.paymentMethods.find((m: PaymentMethod) => m.isDefault);
-        if (def) setSelectedMethod(def._id);
-        else if (data.paymentMethods.length > 0) setSelectedMethod(data.paymentMethods[0]._id);
-      })
-      .catch(() => toast.error('Failed to load payment methods'))
+      .then(({ data }) => setMethods(data.paymentMethods))
+      .catch(() => {})
       .finally(() => setLoadingMethods(false));
   }, []);
 
   const handlePlaceOrder = async () => {
-    if (!selectedMethod) return toast.error('Select a payment method');
-    if ((user?.wallet ?? 0) < grandTotal) return toast.error('Insufficient wallet balance. Please top up.');
+    if (!hasSufficientFunds) {
+      toast.error('Insufficient wallet balance. Please top up first.');
+      setRechargeOpen(true);
+      return;
+    }
     setPlacing(true);
     try {
-      for (const item of items) {
-        await api.post('/orders', { productId: item._id });
+      const results = await Promise.allSettled(
+        items.map((item) => api.post('/orders', { productId: item._id }))
+      );
+      const failed = results.filter((r) => r.status === 'rejected');
+      if (failed.length === 0) {
+        toast.success('All orders placed successfully!');
+      } else {
+        toast.error(`${failed.length} order(s) failed. Check your dashboard.`);
       }
-      const newBalance = (user?.wallet ?? 0) - grandTotal;
-      updateUser({ wallet: newBalance });
+      await fetchBalance();
+      const { data } = await api.get('/auth/me');
+      updateUser(data.user);
       clearCart();
       setSuccess(true);
-      toast.success(`Order placed successfully!`);
-      setTimeout(() => navigate('/dashboard'), 2200);
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Checkout failed');
     } finally {
@@ -75,23 +82,47 @@ export default function CheckoutPage() {
     }
   };
 
+  const handleRecharge = async () => {
+    const amount = customAmount ? parseFloat(customAmount) : rechargeAmount;
+    if (!amount || amount <= 0) return toast.error('Enter a valid amount');
+    if (!txnId.trim()) return toast.error('Transaction ID is required');
+    setRecharging(true);
+    try {
+      const { data } = await api.post('/wallet/topup', {
+        amount,
+        method: rechargeMethod,
+        transactionId: txnId.trim(),
+      });
+      toast.success(data.message);
+      updateUser({ ...user!, wallet: data.balance });
+      setRechargeOpen(false);
+      setTxnId('');
+      setCustomAmount('');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Top-up failed');
+    } finally {
+      setRecharging(false);
+    }
+  };
+
   if (success) {
     return (
-      <div className="min-h-screen gradient-bg pt-20 flex items-center justify-center">
-        <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="text-center"
-        >
-          <motion.div
-            className="w-24 h-24 rounded-full bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center mx-auto mb-6"
-            animate={{ scale: [1, 1.1, 1] }}
-            transition={{ duration: 0.6 }}
-          >
-            <i className="pi pi-check text-white text-4xl" />
+      <div className="min-h-screen gradient-bg flex items-center justify-center px-4">
+        <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
+          className="glass rounded-3xl p-10 text-center max-w-md w-full border border-green-500/20">
+          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
+            transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
+            className="w-20 h-20 rounded-full bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center mx-auto mb-6">
+            <i className="pi pi-check text-white text-3xl" />
           </motion.div>
-          <h2 className="text-white font-bold text-3xl mb-2">Order Placed!</h2>
-          <p className="text-white/50">Redirecting to your dashboard...</p>
+          <h2 className="text-white font-black text-3xl mb-2">Order Placed!</h2>
+          <p className="text-white/50 mb-8">Your subscriptions are being processed. Check your dashboard for credentials.</p>
+          <div className="flex gap-3">
+            <button onClick={() => navigate('/dashboard')} className="btn-primary flex-1 py-3">
+              <i className="pi pi-user mr-2" /> My Orders
+            </button>
+            <button onClick={() => navigate('/shop')} className="btn-ghost flex-1 py-3">Shop More</button>
+          </div>
         </motion.div>
       </div>
     );
@@ -100,214 +131,126 @@ export default function CheckoutPage() {
   return (
     <div className="min-h-screen gradient-bg pt-20 pb-12">
       <div className="max-w-4xl mx-auto px-4">
-
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-          <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-white/40 hover:text-white text-sm mb-4 transition-colors">
-            <i className="pi pi-arrow-left text-xs" /> Back
-          </button>
-          <h1 className="text-white font-bold text-3xl flex items-center gap-3">
-            <i className="pi pi-shopping-cart text-indigo-400" />
-            Checkout
-            <span className="text-indigo-400">— {format(grandTotal)}</span>
-          </h1>
+          <h1 className="text-white font-black text-3xl">Checkout</h1>
+          <p className="text-white/40 text-sm mt-1">{items.length} item{items.length !== 1 ? 's' : ''} in your cart</p>
         </motion.div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-
-          {/* Left: Payment Methods */}
-          <div className="lg:col-span-3 space-y-5">
-            <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}
-              className="glass rounded-2xl border border-white/10 overflow-hidden">
-              <div className="p-5 border-b border-white/10">
-                <h2 className="text-white font-semibold flex items-center gap-2">
-                  <i className="pi pi-credit-card text-indigo-400" /> Payment Method
-                </h2>
-              </div>
-
-              <div className="p-4 space-y-2">
-                {loadingMethods ? (
-                  [1, 2, 3].map((i) => (
-                    <div key={i} className="h-16 glass rounded-xl animate-pulse" />
-                  ))
-                ) : methods.length === 0 ? (
-                  <div className="text-center py-10 text-white/30">
-                    <i className="pi pi-credit-card text-4xl mb-3 block" />
-                    <p>No payment methods available</p>
-                    <p className="text-xs mt-1">Contact admin to configure payment options</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-4">
+            <AnimatePresence>
+              {items.map((item, i) => (
+                <motion.div key={item._id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }} transition={{ delay: i * 0.06 }}
+                  className="glass rounded-2xl border border-white/10 p-4 flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-xl flex items-center justify-center text-white font-black text-xl flex-shrink-0"
+                    style={{ background: `linear-gradient(135deg, ${item.color}, ${item.color}99)` }}>
+                    {item.platform?.[0] || '?'}
                   </div>
-                ) : (
-                  methods.map((m) => {
-                    const pt = PAYMENT_TYPES.find((p) => p.value === m.type);
-                    const isSelected = selectedMethod === m._id;
-                    return (
-                      <motion.button
-                        key={m._id}
-                        onClick={() => setSelectedMethod(m._id)}
-                        whileHover={{ scale: 1.01 }}
-                        whileTap={{ scale: 0.99 }}
-                        className={`w-full flex items-center gap-4 p-4 rounded-xl border transition-all duration-200 text-left ${
-                          isSelected
-                            ? 'border-indigo-500/60 bg-indigo-500/10 shadow-lg shadow-indigo-500/10'
-                            : 'border-white/10 glass hover:border-white/20'
-                        }`}
-                      >
-                        {/* Icon */}
-                        <div
-                          className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0 transition-transform"
-                          style={{
-                            background: `${pt?.color || '#6366f1'}20`,
-                            border: `1px solid ${pt?.color || '#6366f1'}40`,
-                            boxShadow: isSelected ? `0 0 16px ${pt?.color || '#6366f1'}30` : 'none',
-                          }}
-                        >
-                          {pt?.icon || '💳'}
-                        </div>
-
-                        {/* Info */}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white font-medium">{m.label}</p>
-                          {m.upiId && <p className="text-white/40 text-xs mt-0.5">{m.upiId}</p>}
-                          {m.accountDetails && <p className="text-white/40 text-xs mt-0.5 truncate">{m.accountDetails}</p>}
-                          {m.isDefault && (
-                            <span className="text-xs px-1.5 py-0.5 bg-indigo-500/20 text-indigo-400 rounded-full mt-1 inline-block">Default</span>
-                          )}
-                        </div>
-
-                        {/* Radio */}
-                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                          isSelected ? 'border-indigo-400 bg-indigo-500' : 'border-white/20'
-                        }`}>
-                          {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
-                        </div>
-                      </motion.button>
-                    );
-                  })
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-semibold text-sm truncate">{item.name}</p>
+                    <p className="text-white/40 text-xs">{item.platform} · {item.duration}</p>
+                  </div>
+                  <p className="text-indigo-400 font-black text-lg flex-shrink-0">Rs.{item.price}</p>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+          <div className="space-y-4">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+              className="glass rounded-2xl border border-white/10 p-5">
+              <h3 className="text-white font-semibold text-lg mb-4">Order Summary</h3>
+              <div className="space-y-2 text-sm mb-4">
+                <div className="flex justify-between text-white/60"><span>Subtotal</span><span>Rs.{subtotal.toFixed(2)}</span></div>
+                <div className="flex justify-between text-white/60"><span>Tax (18%)</span><span>Rs.{tax.toFixed(2)}</span></div>
+                <div className="h-px bg-white/10 my-2" />
+                <div className="flex justify-between text-white font-bold text-base"><span>Total</span><span>Rs.{grandTotal.toFixed(2)}</span></div>
+              </div>
+              <div className={`rounded-xl p-3 mb-4 flex items-center justify-between ${hasSufficientFunds ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
+                <div>
+                  <p className="text-white/60 text-xs">Wallet Balance</p>
+                  <p className={`font-bold text-sm ${hasSufficientFunds ? 'text-green-400' : 'text-red-400'}`}>Rs.{walletBalance.toFixed(2)}</p>
+                </div>
+                {!hasSufficientFunds && (
+                  <div className="text-right">
+                    <p className="text-red-400 text-xs">Short by</p>
+                    <p className="text-red-400 font-bold text-sm">Rs.{shortfall.toFixed(2)}</p>
+                  </div>
                 )}
               </div>
-
-              {/* QR code display for selected method */}
-              <AnimatePresence>
-                {selectedMethod && (() => {
-                  const m = methods.find((x) => x._id === selectedMethod);
-                  return m?.qrCodeUrl ? (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="border-t border-white/10 p-5 flex flex-col items-center gap-3"
-                    >
-                      <p className="text-white/50 text-sm">Scan QR to pay</p>
-                      <img
-                        src={m.qrCodeUrl}
-                        alt="QR Code"
-                        className="w-40 h-40 rounded-xl border border-white/10 object-contain bg-white p-2"
-                      />
-                    </motion.div>
-                  ) : null;
-                })()}
-              </AnimatePresence>
-            </motion.div>
-
-            {/* Wallet balance info */}
-            <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
-              className="glass rounded-2xl border border-white/10 p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                  <i className="pi pi-wallet text-white text-sm" />
-                </div>
-                <div>
-                  <p className="text-white/50 text-xs">Wallet Balance</p>
-                  <p className="text-white font-bold text-lg">{format(user?.wallet ?? 0)}</p>
-                </div>
-              </div>
-              {(user?.wallet ?? 0) < grandTotal ? (
-                <div className="flex items-center gap-2 text-red-400 text-sm">
-                  <i className="pi pi-exclamation-triangle" />
-                  <span>Insufficient</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-green-400 text-sm">
-                  <i className="pi pi-check-circle" />
-                  <span>Sufficient</span>
-                </div>
+              {!hasSufficientFunds && (
+                <button onClick={() => setRechargeOpen(true)}
+                  className="w-full py-2.5 rounded-xl text-sm font-semibold mb-3 border border-indigo-500/40 text-indigo-400 hover:bg-indigo-500/10 transition-colors">
+                  + Top Up Wallet
+                </button>
               )}
+              <motion.button onClick={handlePlaceOrder} disabled={placing}
+                className="w-full py-3 rounded-xl text-white font-bold text-sm disabled:opacity-50 transition-all"
+                style={{ background: hasSufficientFunds ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'rgba(255,255,255,0.05)' }}
+                whileTap={{ scale: 0.97 }}>
+                {placing
+                  ? <><i className="pi pi-spin pi-spinner mr-2" />Processing...</>
+                  : <><i className="pi pi-check mr-2" />Place Order Rs.{grandTotal.toFixed(2)}</>}
+              </motion.button>
             </motion.div>
           </div>
-
-          {/* Right: Order Summary */}
-          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 }}
-            className="lg:col-span-2 space-y-4">
-            <div className="glass rounded-2xl border border-white/10 overflow-hidden sticky top-24">
-              <div className="p-5 border-b border-white/10">
-                <h2 className="text-white font-semibold flex items-center gap-2">
-                  <i className="pi pi-list text-indigo-400" /> Order Summary
-                </h2>
-              </div>
-
-              {/* Items */}
-              <div className="p-4 space-y-3 max-h-64 overflow-y-auto">
-                {items.map((item) => (
-                  <div key={item._id} className="flex items-center gap-3">
-                    <div
-                      className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-xs flex-shrink-0"
-                      style={{ background: `linear-gradient(135deg, ${item.gradientFrom}, ${item.gradientTo})` }}
-                    >
-                      {item.platform[0]}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-medium truncate">{item.name}</p>
-                      <p className="text-white/40 text-xs">{item.duration}</p>
-                    </div>
-                    <span className="text-indigo-400 font-semibold text-sm">{format(item.price)}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Totals */}
-              <div className="p-4 border-t border-white/10 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-white/50">Subtotal</span>
-                  <span className="text-white">{format(subtotal)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-white/50">Tax (18% GST)</span>
-                  <span className="text-white">{format(tax)}</span>
-                </div>
-                <div className="h-px bg-white/10 my-2" />
-                <div className="flex justify-between">
-                  <span className="text-white font-semibold">Total</span>
-                  <motion.span key={grandTotal} initial={{ scale: 1.1 }} animate={{ scale: 1 }}
-                    className="font-bold text-xl text-orange-400">
-                    {format(grandTotal)}
-                  </motion.span>
-                </div>
-              </div>
-
-              {/* CTA */}
-              <div className="p-4 pt-0">
-                <motion.button
-                  onClick={handlePlaceOrder}
-                  disabled={placing || !selectedMethod || methods.length === 0 || (user?.wallet ?? 0) < grandTotal}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="w-full py-4 rounded-xl font-bold text-white text-base flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                  style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7)' }}
-                >
-                  {placing ? (
-                    <><i className="pi pi-spin pi-spinner" /> Processing...</>
-                  ) : (
-                    <><i className="pi pi-lock text-sm" /> Place Order — {format(grandTotal)}</>
-                  )}
-                </motion.button>
-                <p className="text-white/20 text-xs text-center mt-2 flex items-center justify-center gap-1">
-                  <i className="pi pi-shield text-xs" /> Secured · Wallet deducted instantly
-                </p>
-              </div>
-            </div>
-          </motion.div>
         </div>
       </div>
+      <AnimatePresence>
+        {rechargeOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={(e) => e.target === e.currentTarget && setRechargeOpen(false)}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              className="glass rounded-2xl border border-white/10 p-6 w-full max-w-md">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-white font-bold text-lg">Top Up Wallet</h3>
+                <button onClick={() => setRechargeOpen(false)} className="text-white/40 hover:text-white"><i className="pi pi-times" /></button>
+              </div>
+              <div className="grid grid-cols-4 gap-2 mb-4">
+                {QUICK_AMOUNTS.map((a) => (
+                  <button key={a} onClick={() => { setRechargeAmount(a); setCustomAmount(''); }}
+                    className={`py-2 rounded-xl text-sm font-semibold transition-all ${rechargeAmount === a && !customAmount ? 'bg-indigo-500 text-white' : 'glass text-white/60 hover:text-white border border-white/10'}`}>
+                    Rs.{a}
+                  </button>
+                ))}
+              </div>
+              <input value={customAmount} onChange={(e) => setCustomAmount(e.target.value)}
+                placeholder="Custom amount" type="number" className="input-field text-sm mb-4" />
+              {!loadingMethods && methods.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-white/60 text-xs mb-2">Pay via</p>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {methods.map((m) => {
+                      const pt = PAYMENT_TYPES.find((p) => p.value === m.type);
+                      return (
+                        <button key={m._id} onClick={() => setRechargeMethod(m.type)}
+                          className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${rechargeMethod === m.type ? 'border-indigo-500 bg-indigo-500/10' : 'border-white/10 bg-white/5 hover:border-white/20'}`}>
+                          <span className="text-xl">{pt?.icon || '?'}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white text-sm font-medium">{m.label}</p>
+                            {m.upiId && <p className="text-white/40 text-xs truncate">{m.upiId}</p>}
+                          </div>
+                          {m.qrCodeUrl && <img src={m.qrCodeUrl} alt="QR" className="w-10 h-10 rounded object-contain bg-white p-0.5" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              <div className="mb-4">
+                <label className="text-white/60 text-xs block mb-1">Transaction ID *</label>
+                <input value={txnId} onChange={(e) => setTxnId(e.target.value)}
+                  placeholder="Enter your transaction ID" className="input-field text-sm" />
+              </div>
+              <button onClick={handleRecharge} disabled={recharging} className="btn-primary w-full py-3 disabled:opacity-50">
+                {recharging
+                  ? <><i className="pi pi-spin pi-spinner mr-2" />Processing...</>
+                  : `Add Rs.${customAmount || rechargeAmount} to Wallet`}
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

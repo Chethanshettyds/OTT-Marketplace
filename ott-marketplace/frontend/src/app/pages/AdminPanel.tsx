@@ -29,8 +29,9 @@ const EMPTY_FORM: AddMethodForm = { type: '', label: '', upiId: '', qrCodeUrl: '
 interface Product {
   _id: string; name: string; platform: string; category: string;
   price: number; originalPrice: number; duration: string; stock: number;
-  isActive: boolean; gradientFrom: string; gradientTo: string;
-  imageUrl?: string; deletedAt?: string | null;
+  isActive: boolean; isFeatured: boolean; isHot: boolean; isLimited: boolean;
+  gradientFrom: string; gradientTo: string; priceColor?: string;
+  services?: string[]; imageUrl?: string; deletedAt?: string | null;
 }
 interface Order {
   _id: string; orderNumber: string; user: { name: string; email: string };
@@ -70,6 +71,7 @@ export default function AdminPanel() {
   const [productDialog, setProductDialog] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [servicesInput, setServicesInput] = useState<string>('');
 
   // ── Payment Methods (Settings tab) ──────────────────────────────────────────
   const [payMethods, setPayMethods] = useState<PaymentMethod[]>([]);
@@ -208,16 +210,19 @@ export default function AdminPanel() {
     setEditProduct(product || null);
     reset(product || {});
     setImagePreview(product?.imageUrl || '');
+    setServicesInput(product?.services?.join(', ') || '');
     setProductDialog(true);
   };
 
   const handleProductSave = async (data: Partial<Product>) => {
+    // Parse services from the local input state
+    const services = servicesInput.split(',').map((s) => s.trim()).filter(Boolean);
     try {
       if (editProduct) {
-        await api.put(`/admin/products/${editProduct._id}`, data);
+        await api.put(`/admin/products/${editProduct._id}`, { ...data, services });
         toast.success('Product updated');
       } else {
-        await api.post('/admin/products', data);
+        await api.post('/admin/products', { ...data, services });
         toast.success('Product created');
       }
       setProductDialog(false);
@@ -887,7 +892,7 @@ export default function AdminPanel() {
 
       {/* Product Dialog */}
       <Dialog visible={productDialog} onHide={() => setProductDialog(false)}
-        header={editProduct ? 'Edit Product' : 'Add Product'} style={{ width: '520px' }} className="glass">
+        header={editProduct ? 'Edit Product' : 'Add Product'} style={{ width: '560px' }} className="glass">
         <form onSubmit={handleSubmit(handleProductSave)} className="space-y-4 p-2">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -903,11 +908,11 @@ export default function AdminPanel() {
               </select>
             </div>
             <div>
-              <label className="text-white/70 text-sm block mb-1">Price ($)</label>
+              <label className="text-white/70 text-sm block mb-1">Price (₹)</label>
               <input {...register('price', { required: true, valueAsNumber: true })} type="number" step="0.01" className="input-field text-sm" />
             </div>
             <div>
-              <label className="text-white/70 text-sm block mb-1">Original Price ($)</label>
+              <label className="text-white/70 text-sm block mb-1">Original Price (₹)</label>
               <input {...register('originalPrice', { required: true, valueAsNumber: true })} type="number" step="0.01" className="input-field text-sm" />
             </div>
             <div>
@@ -919,18 +924,46 @@ export default function AdminPanel() {
               <input {...register('stock', { valueAsNumber: true })} type="number" className="input-field text-sm" />
             </div>
             <div>
-              <label className="text-white/70 text-sm block mb-1">Color From</label>
+              <label className="text-white/70 text-sm block mb-1">Gradient From</label>
               <input {...register('gradientFrom')} type="color" className="input-field text-sm h-10" />
             </div>
             <div>
-              <label className="text-white/70 text-sm block mb-1">Color To</label>
+              <label className="text-white/70 text-sm block mb-1">Gradient To</label>
               <input {...register('gradientTo')} type="color" className="input-field text-sm h-10" />
             </div>
           </div>
-          <div className="col-span-2 space-y-2">
-            <label className="text-white/70 text-sm block">Product Image</label>
 
-            {/* Upload button */}
+          {/* Services */}
+          <div>
+            <label className="text-white/70 text-sm block mb-1">Services (comma-separated)</label>
+            <input
+              value={servicesInput}
+              onChange={(e) => setServicesInput(e.target.value)}
+              placeholder="e.g. Prime Video, Prime Music"
+              className="input-field text-sm"
+            />
+            <p className="text-white/30 text-xs mt-1">Auto-filled from platform if left empty</p>
+          </div>
+
+          {/* Badges */}
+          <div className="flex gap-6">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input {...register('isHot')} type="checkbox" className="w-4 h-4 accent-orange-500" />
+              <span className="text-white/70 text-sm">🔥 Hot Deal</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input {...register('isLimited')} type="checkbox" className="w-4 h-4 accent-purple-500" />
+              <span className="text-white/70 text-sm">⏰ Limited Time</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input {...register('isFeatured')} type="checkbox" className="w-4 h-4 accent-indigo-500" />
+              <span className="text-white/70 text-sm">⭐ Featured</span>
+            </label>
+          </div>
+
+          {/* Image */}
+          <div className="space-y-2">
+            <label className="text-white/70 text-sm block">Product Image (optional)</label>
             <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border-2 border-dashed border-white/20 hover:border-indigo-500/60 transition-colors bg-white/5">
               <i className="pi pi-upload text-indigo-400" />
               <span className="text-white/60 text-sm">Click to upload image</span>
@@ -951,8 +984,6 @@ export default function AdminPanel() {
                 }}
               />
             </label>
-
-            {/* OR paste URL */}
             <div className="flex items-center gap-2">
               <div className="flex-1 h-px bg-white/10" />
               <span className="text-white/30 text-xs">or paste URL</span>
@@ -964,28 +995,20 @@ export default function AdminPanel() {
               className="input-field text-sm"
               onChange={(e) => { setImagePreview(e.target.value); setValue('imageUrl', e.target.value); }}
             />
-
-            {/* Preview */}
             {imagePreview && (
               <div className="relative w-full h-32 rounded-lg overflow-hidden border border-white/10 bg-white/5">
-                <img
-                  src={imagePreview}
-                  alt="Preview"
-                  className="w-full h-full object-contain"
-                  onError={() => setImagePreview('')}
-                />
-                <button
-                  type="button"
-                  onClick={() => { setImagePreview(''); setValue('imageUrl', ''); }}
-                  className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 text-white/70 hover:text-red-400 flex items-center justify-center text-xs"
-                >
+                <img src={imagePreview} alt="Preview" className="w-full h-full object-contain"
+                  onError={() => setImagePreview('')} />
+                <button type="button" onClick={() => { setImagePreview(''); setValue('imageUrl', ''); }}
+                  className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 text-white/70 hover:text-red-400 flex items-center justify-center text-xs">
                   <i className="pi pi-times" />
                 </button>
               </div>
             )}
           </div>
+
           <div className="flex gap-3 pt-2">
-            <button type="submit" className="btn-primary flex-1 py-2.5">Save</button>
+            <button type="submit" className="btn-primary flex-1 py-2.5">💾 Save Product</button>
             <button type="button" onClick={() => setProductDialog(false)} className="btn-ghost flex-1 py-2.5">Cancel</button>
           </div>
         </form>

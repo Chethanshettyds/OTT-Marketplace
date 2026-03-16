@@ -1,8 +1,26 @@
 const User = require('../models/User');
 const Product = require('../models/Product');
+const { PLATFORM_THEMES, PLATFORM_SERVICES } = require('../models/Product');
 const Order = require('../models/Order');
 const Payment = require('../models/Payment');
 const { body, validationResult } = require('express-validator');
+
+// Apply auto-theme + default services if not manually provided
+function applyAutoTheme(body) {
+  const key = (body.platform || '').toLowerCase();
+  const theme = PLATFORM_THEMES[key];
+  if (theme) {
+    if (!body.gradientFrom || body.gradientFrom === '#6366f1') body.gradientFrom = theme.gradientFrom;
+    if (!body.gradientTo || body.gradientTo === '#8b5cf6') body.gradientTo = theme.gradientTo;
+    if (!body.priceColor) body.priceColor = theme.priceColor;
+    body.color = body.gradientFrom;
+  }
+  // Auto-fill services if empty
+  if (!body.services || body.services.length === 0) {
+    body.services = PLATFORM_SERVICES[key] || [];
+  }
+  return body;
+}
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 
@@ -71,13 +89,12 @@ exports.createProduct = async (req, res) => {
     return res.status(422).json({ error: 'Validation failed', details: errors.array() });
   }
   try {
-    // Ensure numeric fields are numbers, not strings
-    const body = { ...req.body };
+    let body = { ...req.body };
     if (body.price !== undefined) body.price = Number(body.price);
     if (body.originalPrice !== undefined) body.originalPrice = Number(body.originalPrice);
     if (body.stock !== undefined) body.stock = Number(body.stock);
     if (body.durationDays !== undefined) body.durationDays = Number(body.durationDays);
-
+    body = applyAutoTheme(body);
     const product = await Product.create(body);
     res.status(201).json({ product });
   } catch (err) {
@@ -87,10 +104,11 @@ exports.createProduct = async (req, res) => {
 
 exports.updateProduct = async (req, res) => {
   try {
-    const body = { ...req.body };
+    let body = { ...req.body };
     if (body.price !== undefined) body.price = Number(body.price);
     if (body.originalPrice !== undefined) body.originalPrice = Number(body.originalPrice);
     if (body.stock !== undefined) body.stock = Number(body.stock);
+    body = applyAutoTheme(body);
 
     // Bypass soft-delete hook by passing deletedAt explicitly
     const product = await Product.findOneAndUpdate(

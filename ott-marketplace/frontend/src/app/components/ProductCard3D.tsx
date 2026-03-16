@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { platformLetters } from '../utils/threeHelpers';
-import { useCurrency } from '../hooks/useCurrency';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 
@@ -17,8 +16,12 @@ interface Product {
   stockStatus?: string;
   gradientFrom: string;
   gradientTo: string;
+  priceColor?: string;
   features: string[];
+  services?: string[];
   isFeatured: boolean;
+  isHot?: boolean;
+  isLimited?: boolean;
   imageUrl?: string;
 }
 
@@ -36,18 +39,24 @@ function getStockStatus(product: Product) {
   return 'in_stock';
 }
 
+// Resolve price color: use stored priceColor or fall back to gradientFrom
+function getPriceColor(product: Product): string {
+  if (product.priceColor) return product.priceColor;
+  return ''; // will use inline style fallback
+}
+
 export default function ProductCard3D({ product, onBuy, onAddToCart, inCart }: ProductCard3DProps) {
   const [hovered, setHovered] = useState(false);
   const [waitlistEmail, setWaitlistEmail] = useState('');
   const [showWaitlist, setShowWaitlist] = useState(false);
   const [joining, setJoining] = useState(false);
-  const { format, currency } = useCurrency();
 
   const discount = Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100);
   const letter = platformLetters[product.platform] || product.platform[0];
   const stockStatus = getStockStatus(product);
   const isOutOfStock = stockStatus === 'out_of_stock';
   const isLowStock = stockStatus === 'low_stock';
+  const priceColorClass = getPriceColor(product);
 
   const handleJoinWaitlist = async () => {
     if (!waitlistEmail.trim()) return;
@@ -69,29 +78,39 @@ export default function ProductCard3D({ product, onBuy, onAddToCart, inCart }: P
       className="relative cursor-pointer select-none"
       onHoverStart={() => setHovered(true)}
       onHoverEnd={() => setHovered(false)}
-      whileHover={{ y: -8, scale: 1.02 }}
+      whileHover={{ y: -6, scale: 1.02 }}
       transition={{ type: 'spring', stiffness: 300, damping: 20 }}
     >
-      {product.isFeatured && (
-        <div className="absolute -top-2 -right-2 z-10 bg-gradient-to-r from-yellow-400 to-orange-500 text-black text-xs font-bold px-2 py-0.5 rounded-full">
-          HOT
-        </div>
-      )}
-      <div className="absolute -top-2 -left-2 z-10 bg-gradient-to-r from-green-400 to-emerald-500 text-black text-xs font-bold px-2 py-0.5 rounded-full">
+      {/* Discount badge — top left */}
+      <div className="absolute -top-2 -left-2 z-10 bg-gradient-to-r from-green-400 to-emerald-500 text-black text-xs font-bold px-2 py-0.5 rounded-full shadow-lg">
         -{discount}%
       </div>
 
+      {/* HOT badge — top right */}
+      {(product.isHot || product.isFeatured) && !product.isLimited && (
+        <div className="absolute -top-2 -right-2 z-10 bg-gradient-to-r from-yellow-400 to-orange-500 text-black text-xs font-bold px-2.5 py-0.5 rounded-full shadow-lg">
+          HOT
+        </div>
+      )}
+
+      {/* LIMITED badge — top right */}
+      {product.isLimited && (
+        <div className="absolute -top-2 -right-2 z-10 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-bold px-2.5 py-0.5 rounded-full shadow-lg">
+          LIMITED
+        </div>
+      )}
+
       <div
-        className={`glass rounded-2xl overflow-hidden border transition-all duration-300 ${
+        className={`rounded-2xl overflow-hidden border transition-all duration-300 bg-[#12121f] ${
           isOutOfStock ? 'border-red-500/20 opacity-80' : 'border-white/10'
         }`}
         style={{
           boxShadow: hovered
-            ? `0 20px 60px ${product.gradientFrom}40, 0 0 30px ${product.gradientFrom}20`
-            : '0 4px 20px rgba(0,0,0,0.3)',
+            ? `0 20px 50px ${product.gradientFrom}50, 0 0 20px ${product.gradientFrom}20`
+            : '0 4px 20px rgba(0,0,0,0.4)',
         }}
       >
-        {/* Card header */}
+        {/* Gradient image area */}
         <div
           className="relative h-36 flex items-center justify-center overflow-hidden"
           style={{
@@ -106,9 +125,8 @@ export default function ProductCard3D({ product, onBuy, onAddToCart, inCart }: P
               alt={product.name}
               className={`w-full h-full object-cover ${isOutOfStock ? 'grayscale' : ''}`}
               onError={(e) => {
-                const target = e.currentTarget;
-                target.style.display = 'none';
-                const parent = target.parentElement!;
+                e.currentTarget.style.display = 'none';
+                const parent = e.currentTarget.parentElement!;
                 parent.style.background = `linear-gradient(135deg, ${product.gradientFrom}, ${product.gradientTo})`;
                 const fallback = parent.querySelector<HTMLElement>('.img-fallback');
                 if (fallback) fallback.style.display = 'flex';
@@ -116,16 +134,23 @@ export default function ProductCard3D({ product, onBuy, onAddToCart, inCart }: P
             />
           ) : null}
 
+          {/* Letter fallback */}
           <div
             className="img-fallback absolute inset-0 flex items-center justify-center"
             style={{ display: product.imageUrl ? 'none' : 'flex' }}
           >
-            <motion.div className="absolute w-32 h-32 rounded-full opacity-20" style={{ background: product.gradientFrom }}
-              animate={hovered ? { scale: 1.5, opacity: 0.3 } : { scale: 1, opacity: 0.2 }} transition={{ duration: 0.4 }} />
-            <motion.div className="absolute w-20 h-20 rounded-full opacity-30 -bottom-4 -right-4" style={{ background: product.gradientTo }}
-              animate={hovered ? { scale: 1.3 } : { scale: 1 }} transition={{ duration: 0.4 }} />
-            <motion.div className="relative z-10 text-white font-black text-5xl" style={{ textShadow: '0 2px 20px rgba(0,0,0,0.5)' }}
-              animate={hovered ? { scale: 1.1, rotateY: 15 } : { scale: 1, rotateY: 0 }} transition={{ duration: 0.3 }}>
+            <motion.div
+              className="absolute w-28 h-28 rounded-full opacity-20"
+              style={{ background: product.gradientFrom }}
+              animate={hovered ? { scale: 1.5, opacity: 0.3 } : { scale: 1, opacity: 0.2 }}
+              transition={{ duration: 0.4 }}
+            />
+            <motion.div
+              className="relative z-10 text-white font-black text-5xl"
+              style={{ textShadow: '0 2px 20px rgba(0,0,0,0.5)' }}
+              animate={hovered ? { scale: 1.1 } : { scale: 1 }}
+              transition={{ duration: 0.3 }}
+            >
               {letter}
             </motion.div>
           </div>
@@ -137,10 +162,10 @@ export default function ProductCard3D({ product, onBuy, onAddToCart, inCart }: P
             </div>
           )}
 
-          {/* Stock badges */}
+          {/* Low stock badge */}
           {!isOutOfStock && isLowStock && (
             <div className="absolute bottom-2 right-2 bg-orange-500/90 text-white text-xs px-2 py-0.5 rounded-full font-medium">
-              ⚡ Only {product.stock} left
+              ⚡ {product.stock} left
             </div>
           )}
           {!isOutOfStock && !isLowStock && product.stock < 20 && (
@@ -152,29 +177,41 @@ export default function ProductCard3D({ product, onBuy, onAddToCart, inCart }: P
 
         {/* Card body */}
         <div className="p-4">
-          <div className="flex items-start justify-between mb-2">
-            <div>
-              <h3 className="text-white font-semibold text-sm leading-tight">{product.name}</h3>
-              <span className="text-white/40 text-xs">{product.duration}</span>
-            </div>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/60">{product.category}</span>
-          </div>
-
-          <div className="flex flex-wrap gap-1 mb-3">
-            {product.features?.slice(0, 2).map((f) => (
-              <span key={f} className="text-xs px-1.5 py-0.5 rounded bg-white/5 text-white/50">{f}</span>
-            ))}
-          </div>
-
-          <div className="flex items-baseline gap-2 mb-4">
-            <span className={`text-2xl font-black ${isOutOfStock ? 'text-white/40' : ''}`}
-              style={isOutOfStock ? {} : { color: product.gradientFrom }}>
-              {format(product.price)}
+          {/* Name + category */}
+          <div className="flex items-start justify-between mb-1">
+            <h3 className="text-white font-semibold text-sm leading-tight flex-1 mr-2">{product.name}</h3>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/50 whitespace-nowrap flex-shrink-0">
+              {product.category}
             </span>
-            {currency !== 'INR' && (
-              <span className="text-white/40 text-xs">₹{product.price.toLocaleString('en-IN')}</span>
-            )}
-            <span className="text-white/30 text-sm line-through ml-auto">{format(product.originalPrice)}</span>
+          </div>
+
+          {/* Duration */}
+          <p className="text-white/40 text-xs mb-2">{product.duration}</p>
+
+          {/* Services tags — matches screenshot "Prime Video  Prime Music" */}
+          {product.services && product.services.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {product.services.slice(0, 3).map((s) => (
+                <span
+                  key={s}
+                  className="text-xs px-2 py-0.5 rounded-md text-white/70"
+                  style={{ background: `${product.gradientFrom}25`, border: `1px solid ${product.gradientFrom}40` }}
+                >
+                  {s}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Price row */}
+          <div className="flex items-baseline gap-2 mb-4">
+            <span
+              className={`text-2xl font-black ${priceColorClass} ${isOutOfStock ? 'opacity-40' : ''}`}
+              style={!priceColorClass ? { color: product.gradientFrom } : {}}
+            >
+              ₹{product.price}
+            </span>
+            <span className="text-white/30 text-sm line-through ml-auto">₹{product.originalPrice}</span>
           </div>
 
           {/* Actions */}
@@ -187,8 +224,7 @@ export default function ProductCard3D({ product, onBuy, onAddToCart, inCart }: P
                 🔔 Notify When Available
               </button>
               {showWaitlist && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-                  className="flex gap-2">
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="flex gap-2">
                   <input
                     value={waitlistEmail}
                     onChange={(e) => setWaitlistEmail(e.target.value)}
@@ -207,7 +243,7 @@ export default function ProductCard3D({ product, onBuy, onAddToCart, inCart }: P
             <div className="flex gap-2">
               <motion.button
                 onClick={() => onBuy(product)}
-                className="flex-1 py-2 rounded-lg text-white text-sm font-semibold transition-all duration-200"
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-bold transition-all duration-200 flex items-center justify-center gap-1.5"
                 style={{
                   background: isLowStock
                     ? 'linear-gradient(135deg, #f97316, #ef4444)'
@@ -216,13 +252,14 @@ export default function ProductCard3D({ product, onBuy, onAddToCart, inCart }: P
                 }}
                 whileTap={{ scale: 0.97 }}
               >
-                <i className="pi pi-bolt mr-1 text-xs" />
-                {isLowStock ? '⚡ Buy Now' : 'Buy Now'}
+                ⚡ Buy Now
               </motion.button>
               <motion.button
                 onClick={() => onAddToCart(product)}
-                className={`p-2 rounded-lg border transition-all duration-200 ${
-                  inCart ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' : 'border-white/10 text-white/50 hover:border-white/30 hover:text-white'
+                className={`p-2.5 rounded-xl border transition-all duration-200 ${
+                  inCart
+                    ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400'
+                    : 'border-white/10 text-white/50 hover:border-white/30 hover:text-white'
                 }`}
                 whileTap={{ scale: 0.9 }}
               >
