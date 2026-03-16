@@ -70,7 +70,7 @@ export function useNotifications() {
     pollRef.current = setInterval(fetchCounts, 30_000);
 
     if (!socketRef) {
-      socketRef = io('/', {
+      socketRef = io(import.meta.env.VITE_API_URL || '/', {
         path: '/socket.io',
         transports: ['websocket'],
         reconnectionAttempts: 5,

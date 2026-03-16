@@ -36,7 +36,7 @@ export default function BroadcastsPage() {
     fetchBroadcasts();
     markNotifRead('broadcasts');
 
-    socket = io('/', { path: '/socket.io', transports: ['websocket'] });
+    socket = io(import.meta.env.VITE_API_URL || '/', { path: '/socket.io', transports: ['websocket'] });
     socket.emit('join_user', { userId: user?._id });
 
     socket.on('broadcast', (data: Broadcast) => {

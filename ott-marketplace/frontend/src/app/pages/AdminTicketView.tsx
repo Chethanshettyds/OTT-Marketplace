@@ -83,7 +83,7 @@ export default function AdminTicketView() {
     fetchTicket();
     markRead('support', id); // clear this ticket's unread notification immediately
 
-    socket = io('/', { path: '/socket.io', transports: ['websocket'] });
+    socket = io(import.meta.env.VITE_API_URL || '/', { path: '/socket.io', transports: ['websocket'] });
     socket.emit('join_ticket', { ticketId: id, userId: user?._id });
 
     socket.on('receive_message', (data) => {

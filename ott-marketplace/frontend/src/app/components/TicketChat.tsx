@@ -58,7 +58,7 @@ export default function TicketChat({ ticketId, onBack }: TicketChatProps) {
 
   useEffect(() => {
     fetchTicket();
-    socket = io('/', { path: '/socket.io', transports: ['websocket'] });
+    socket = io(import.meta.env.VITE_API_URL || '/', { path: '/socket.io', transports: ['websocket'] });
     socket.emit('join_ticket', { ticketId, userId: user?._id });
 
     socket.on('receive_message', (data) => {

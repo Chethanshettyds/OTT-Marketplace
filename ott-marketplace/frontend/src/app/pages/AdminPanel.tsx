@@ -100,7 +100,7 @@ export default function AdminPanel() {
 
   // Connect to socket for live users as soon as AdminPanel mounts
   useEffect(() => {
-    const sock = socketIO('/', { path: '/socket.io', transports: ['websocket'] });
+    const sock = socketIO(import.meta.env.VITE_API_URL || '/', { path: '/socket.io', transports: ['websocket'] });
     sock.emit('join_admin');
     sock.on('online_users_update', ({ users: u }: { users: OnlineUser[]; count: number }) => {
       setOnlineUsers(u);

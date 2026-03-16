@@ -51,7 +51,7 @@ export default function LiveUsersPanel({ onUsersChange, externalUsers }: Props) 
   useEffect(() => {
     if (externalUsers) return; // parent handles socket
     if (!panelSocket) {
-      panelSocket = io('/', { path: '/socket.io', transports: ['websocket'] });
+      panelSocket = io(import.meta.env.VITE_API_URL || '/', { path: '/socket.io', transports: ['websocket'] });
     }
     panelSocket.emit('join_admin');
     panelSocket.on('online_users_update', ({ users: u }: { users: OnlineUser[]; count: number }) => {

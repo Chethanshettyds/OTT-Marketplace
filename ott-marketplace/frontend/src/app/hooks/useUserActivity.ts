@@ -15,7 +15,7 @@ export function useUserActivity() {
     if (!isAuthenticated || !user?._id || isAdmin) return;
 
     if (!activitySocket) {
-      activitySocket = io('/', {
+      activitySocket = io(import.meta.env.VITE_API_URL || '/', {
         path: '/socket.io',
         transports: ['websocket'],
         reconnectionAttempts: 5,
