@@ -22,12 +22,22 @@ require('./utils/mailer');
 const app = express();
 const server = http.createServer(app);
 
-const io = new Server(server, {
-  cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    methods: ['GET', 'POST'],
-    credentials: true,
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+  .split(',')
+  .map((o) => o.trim());
+
+const corsOptions = {
+  origin: (origin, cb) => {
+    // Allow requests with no origin (mobile apps, curl, server-to-server)
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    cb(new Error(`CORS: origin ${origin} not allowed`));
   },
+  credentials: true,
+};
+
+const io = new Server(server, {
+  cors: { origin: allowedOrigins, methods: ['GET', 'POST'], credentials: true },
 });
 
 // Rate limiting — only apply to auth endpoints to prevent brute force.
@@ -41,7 +51,7 @@ const authLimiter = rateLimit({
   message: { error: 'Too many login attempts, please try again in 15 minutes.' },
 });
 
-app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173', credentials: true }));
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 
 // Routes — NO blanket rate limiter on /api/
