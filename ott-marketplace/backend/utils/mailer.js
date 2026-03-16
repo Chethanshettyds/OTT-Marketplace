@@ -29,28 +29,108 @@ async function sendMail({ to, subject, html }) {
 // ── Pre-built templates ───────────────────────────────────────────────────────
 
 function orderConfirmationMail({ userName, orderNumber, productName, amount, duration }) {
+  const orderDate = new Date().toLocaleString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: true,
+  });
+  const firstName = (userName || 'there').split(' ')[0];
+  const year = new Date().getFullYear();
+
   return {
-    subject: `Order Confirmed – ${productName}`,
-    html: `
-      <div style="font-family:sans-serif;max-width:520px;margin:auto;background:#0f0f1a;color:#e2e8f0;border-radius:12px;overflow:hidden">
-        <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:28px 32px">
-          <h1 style="margin:0;font-size:22px;color:#fff">✅ Order Confirmed</h1>
-          <p style="margin:6px 0 0;color:rgba(255,255,255,0.7);font-size:14px">OTTMarket</p>
-        </div>
-        <div style="padding:28px 32px">
-          <p style="margin:0 0 16px">Hi <strong>${userName}</strong>,</p>
-          <p style="margin:0 0 20px;color:#94a3b8">Your order has been placed successfully. We'll deliver your credentials shortly.</p>
-          <div style="background:#1e1e2e;border-radius:8px;padding:16px 20px;margin-bottom:20px">
-            <table style="width:100%;border-collapse:collapse;font-size:14px">
-              <tr><td style="color:#64748b;padding:4px 0">Order #</td><td style="text-align:right;color:#e2e8f0">${orderNumber}</td></tr>
-              <tr><td style="color:#64748b;padding:4px 0">Product</td><td style="text-align:right;color:#e2e8f0">${productName}</td></tr>
-              <tr><td style="color:#64748b;padding:4px 0">Duration</td><td style="text-align:right;color:#e2e8f0">${duration}</td></tr>
-              <tr><td style="color:#64748b;padding:4px 0">Amount</td><td style="text-align:right;color:#818cf8;font-weight:bold">₹${amount}</td></tr>
-            </table>
+    subject: `Order ${orderNumber} Confirmed – Processing Within 24 Hours`,
+    html: `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Order Confirmed</title>
+</head>
+<body style="margin:0;padding:0;background:linear-gradient(135deg,#1e1b4b 0%,#2d1b69 100%);font-family:'Segoe UI',Arial,sans-serif;min-height:100vh">
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px">
+  <tr><td align="center">
+    <table width="100%" style="max-width:600px;background:rgba(255,255,255,0.05);border-radius:24px;border:1px solid rgba(255,255,255,0.1);overflow:hidden;box-shadow:0 32px 64px rgba(0,0,0,0.4)">
+
+      <!-- HEADER -->
+      <tr>
+        <td style="background:linear-gradient(135deg,#8b5cf6 0%,#a855f7 100%);padding:36px 32px;text-align:center">
+          <div style="margin-bottom:12px">
+            <svg width="52" height="52" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block">
+              <rect width="52" height="52" rx="14" fill="rgba(255,255,255,0.15)"/>
+              <polygon points="20,16 20,36 38,26" fill="white"/>
+              <rect x="13" y="16" width="4" height="20" rx="2" fill="white"/>
+            </svg>
           </div>
-          <p style="font-size:12px;color:#475569;margin:0">If you have questions, open a support ticket on OTTMarket.</p>
-        </div>
-      </div>`,
+          <div style="font-size:28px;font-weight:800;color:#ffffff;letter-spacing:-0.5px">OTTMARKET</div>
+          <h1 style="margin:12px 0 0;font-size:26px;font-weight:700;color:#ffffff">Order Confirmed!</h1>
+          <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:15px">Your subscription is being activated</p>
+        </td>
+      </tr>
+
+      <!-- BODY -->
+      <tr>
+        <td style="padding:32px">
+
+          <!-- Greeting -->
+          <p style="margin:0 0 24px;font-size:16px;color:#e2e8f0">Hi <strong style="color:#ffffff">${firstName}</strong>, your order has been placed successfully.</p>
+
+          <!-- Order ID badge -->
+          <div style="background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.35);border-radius:12px;padding:16px 20px;margin-bottom:24px">
+            <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#a855f7;text-transform:uppercase;letter-spacing:1.5px">Order Reference</p>
+            <p style="margin:0;font-size:18px;font-weight:700;color:#c4b5fd;font-family:'Courier New',monospace">${orderNumber}</p>
+            <p style="margin:4px 0 0;font-size:12px;color:rgba(255,255,255,0.45)">Placed on ${orderDate}</p>
+          </div>
+
+          <!-- Items table -->
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px">
+            <!-- Header row -->
+            <tr>
+              <td style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;padding:0 0 10px;border-bottom:1px solid rgba(255,255,255,0.08)">Product</td>
+              <td style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;padding:0 0 10px;border-bottom:1px solid rgba(255,255,255,0.08);text-align:center">Duration</td>
+              <td style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;padding:0 0 10px;border-bottom:1px solid rgba(255,255,255,0.08);text-align:right">Price</td>
+            </tr>
+            <!-- Item row -->
+            <tr>
+              <td style="padding:16px 0;border-bottom:1px solid rgba(255,255,255,0.06)">
+                <p style="margin:0;font-size:15px;font-weight:600;color:#ffffff">${productName}</p>
+              </td>
+              <td style="padding:16px 0;border-bottom:1px solid rgba(255,255,255,0.06);text-align:center;color:rgba(255,255,255,0.6);font-size:14px">${duration}</td>
+              <td style="padding:16px 0;border-bottom:1px solid rgba(255,255,255,0.06);text-align:right;font-size:17px;font-weight:700;color:#10b981">₹${amount}</td>
+            </tr>
+            <!-- Total row -->
+            <tr>
+              <td colspan="2" style="padding:16px 0 0;font-size:15px;font-weight:700;color:#ffffff">Total Paid</td>
+              <td style="padding:16px 0 0;text-align:right;font-size:22px;font-weight:800;color:#10b981">₹${amount}</td>
+            </tr>
+          </table>
+
+          <!-- ETA notice -->
+          <div style="background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.3);border-radius:12px;padding:20px 24px;text-align:center;margin-bottom:24px">
+            <p style="margin:0 0 6px;font-size:20px;font-weight:700;color:#60a5fa">⚡ Processing in Progress</p>
+            <p style="margin:0;font-size:15px;color:#ffffff">Your order will be completed within <strong>24 hours</strong></p>
+            <p style="margin:6px 0 0;font-size:13px;color:rgba(255,255,255,0.6)">You will receive another email once your credentials are activated</p>
+          </div>
+
+          <!-- Support note -->
+          <p style="margin:0;font-size:13px;color:rgba(255,255,255,0.45);text-align:center">
+            Need help? <a href="mailto:support@ottmarket.com" style="color:#a855f7;text-decoration:none;font-weight:600">Contact Support</a> or open a ticket on OTTMarket.
+          </p>
+
+        </td>
+      </tr>
+
+      <!-- FOOTER -->
+      <tr>
+        <td style="background:rgba(0,0,0,0.25);padding:20px 32px;text-align:center;border-top:1px solid rgba(255,255,255,0.06)">
+          <p style="margin:0 0 4px;font-size:12px;color:rgba(255,255,255,0.35)">© ${year} OTTMARKET. All rights reserved.</p>
+          <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.2)">You received this because you placed an order on OTTMarket.</p>
+        </td>
+      </tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`,
   };
 }
 

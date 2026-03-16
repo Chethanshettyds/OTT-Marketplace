@@ -48,7 +48,7 @@ interface User {
 interface Payment {
   _id: string; userEmail: string; userName: string; orderId: string;
   orderNumber: string; amount: number; method: string; status: string;
-  type: string; transactionId: string; timestamp: string;
+  type: string; transactionId: string; timestamp: string; note?: string;
 }
 interface Ticket {
   _id: string; ticketNumber: string; user: { name: string; email: string };
@@ -113,6 +113,15 @@ export default function AdminPanel() {
   const [orderFilterField, setOrderFilterField] = useState<FilterField>('orderId');
   const [orderPage, setOrderPage] = useState(1);
   const ORDER_PAGE_SIZE = 10;
+
+  // ── Admin Users search ────────────────────────────────────────────────────
+  const [userSearch, setUserSearch] = useState('');
+
+  // ── Admin Payments search ─────────────────────────────────────────────────
+  const [paymentSearch, setPaymentSearch] = useState('');
+
+  // ── Admin Tickets search ──────────────────────────────────────────────────
+  const [ticketSearch, setTicketSearch] = useState('');
 
   const filteredOrders = useMemo(() => {
     const t = orderSearch.trim().toLowerCase();
@@ -588,134 +597,464 @@ export default function AdminPanel() {
           {/* ── Users ── */}
           {activeTab === 'Users' && (
             <div className="space-y-4">
-              {/* Live Users Panel */}
               <LiveUsersPanel externalUsers={onlineUsers} />
 
               <div className="glass rounded-2xl p-6 border border-white/10">
+                {/* Header + search */}
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                   <div>
                     <h3 className="text-white font-semibold text-lg">All Users</h3>
-                    <p className="text-white/40 text-xs mt-0.5">Click 💰 to add funds to a user's wallet</p>
+                    <p className="text-white/40 text-xs mt-0.5">
+                      {userSearch
+                        ? `${users.filter(u => u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.email.toLowerCase().includes(userSearch.toLowerCase())).length} of ${users.length} users`
+                        : `${users.length} total users`}
+                    </p>
+                  </div>
+                  {/* Search input */}
+                  <div className="relative">
+                    <i className="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm pointer-events-none" />
+                    <input
+                      type="text"
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                      placeholder="Search by name or email…"
+                      className="pl-9 pr-8 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-indigo-500/50 focus:bg-white/8 transition-all w-64"
+                    />
+                    {userSearch && (
+                      <button
+                        onClick={() => setUserSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+                      >
+                        <i className="pi pi-times text-xs" />
+                      </button>
+                    )}
                   </div>
                 </div>
-                <DataTable value={users} loading={loading} paginator rows={10} emptyMessage="No users">
-                  <Column header="Name" body={(r) => {
-                    const isOnline = onlineUsers.some((o) => o.userId === r._id);
-                    const onlineUser = onlineUsers.find((o) => o.userId === r._id);
-                    const status = onlineUser?.status;
-                    return (
-                      <div className="flex items-center gap-2">
-                        <div className="relative">
-                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-                            <span className="text-white text-xs font-bold">{r.name?.[0]?.toUpperCase()}</span>
-                          </div>
-                          <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-black ${
-                            status === 'active' ? 'bg-green-400' : status === 'idle' ? 'bg-yellow-400' : 'bg-gray-600'
-                          }`} />
-                        </div>
-                        <span className="text-white text-sm">{r.name}</span>
-                      </div>
-                    );
-                  }} />
-                  <Column field="email" header="Email" />
-                  <Column header="Wallet" body={(r) => <span className="text-indigo-400 font-bold">₹{(r.walletBalance ?? r.wallet ?? 0).toFixed(2)}</span>} />
-                  <Column header="Orders" body={(r) => <span className="text-white/70">{r.orderCount}</span>} />
-                  <Column header="Spent" body={(r) => <span className="text-green-400">₹{(r.totalSpent || 0).toFixed(2)}</span>} />
-                  <Column header="Online Status" body={(r) => {
-                    const onlineUser = onlineUsers.find((o) => o.userId === r._id);
-                    if (!onlineUser) return <span className="text-white/30 text-xs">Offline</span>;
-                    const label = onlineUser.status === 'active' ? '🟢 Active' : onlineUser.status === 'idle' ? '🟡 Idle' : '⚫ Offline';
-                    const page = onlineUser.page;
-                    const pageStr = page.startsWith('/shop') ? 'Shop' : page.startsWith('/checkout') ? 'Checkout' : page.startsWith('/dashboard') ? 'Dashboard' : page.startsWith('/tickets') ? 'Support' : page.replace('/', '') || 'Home';
-                    return (
-                      <div>
-                        <span className="text-xs font-medium">{label}</span>
-                        <p className="text-white/30 text-xs">{pageStr}</p>
-                      </div>
-                    );
-                  }} />
-                  <Column header="Joined" body={(r) => <span className="text-white/50 text-sm">{new Date(r.createdAt).toLocaleDateString()}</span>} />
-                  <Column header="Status" body={(r) => <Tag value={r.isActive ? 'Active' : 'Banned'} severity={r.isActive ? 'success' : 'danger'} />} />
-                  <Column header="Actions" body={(r) => (
-                    <div className="flex gap-1.5">
-                      <button
-                        onClick={() => setFundTarget(r)}
-                        className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-lg transition-colors font-medium"
-                        title="Add funds to wallet"
-                      >
-                        💰 Fund
-                      </button>
-                      <button onClick={() => handleToggleUser(r._id)}
-                        className={`text-xs px-2 py-1 rounded-lg transition-colors ${r.isActive ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'}`}>
-                        {r.isActive ? 'Ban' : 'Unban'}
-                      </button>
-                      <button
-                        onClick={() => handleDeleteUser(r._id, r.name)}
-                        className="text-xs px-2 py-1 rounded-lg bg-rose-900/30 text-rose-400 hover:bg-rose-500/30 transition-colors"
-                        title="Delete user permanently"
-                      >
-                        <i className="pi pi-trash text-xs" />
-                      </button>
+
+                {/* Table */}
+                {loading ? (
+                  <div className="flex items-center justify-center py-16 text-white/30">
+                    <i className="pi pi-spin pi-spinner text-2xl mr-3" /> Loading users…
+                  </div>
+                ) : (() => {
+                  const q = userSearch.trim().toLowerCase();
+                  const filtered = q
+                    ? users.filter(u => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
+                    : users;
+                  return filtered.length === 0 ? (
+                    <div className="text-center py-16 text-white/30">
+                      <i className="pi pi-search text-4xl mb-3 block" />
+                      <p className="text-sm">No users match "{userSearch}"</p>
+                      <button onClick={() => setUserSearch('')} className="text-indigo-400 text-xs mt-2 hover:text-indigo-300">Clear search</button>
                     </div>
-                  )} />
-                </DataTable>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-slate-700/50">
+                      <table className="w-full text-sm min-w-[900px]">
+                        <thead>
+                          <tr className="border-b border-slate-700/60 text-slate-400 text-xs uppercase tracking-wider">
+                            <th className="px-4 py-3 text-left font-medium">User</th>
+                            <th className="px-4 py-3 text-right font-medium">Wallet</th>
+                            <th className="px-4 py-3 text-right font-medium">Orders</th>
+                            <th className="px-4 py-3 text-right font-medium">Spent</th>
+                            <th className="px-4 py-3 text-left font-medium">Online</th>
+                            <th className="px-4 py-3 text-left font-medium">Joined</th>
+                            <th className="px-4 py-3 text-left font-medium">Status</th>
+                            <th className="px-4 py-3 text-left font-medium">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filtered.map((r) => {
+                            const onlineUser = onlineUsers.find((o) => o.userId === r._id);
+                            const status = onlineUser?.status;
+                            const pageStr = onlineUser?.page
+                              ? onlineUser.page.startsWith('/shop') ? 'Shop'
+                              : onlineUser.page.startsWith('/checkout') ? 'Checkout'
+                              : onlineUser.page.startsWith('/dashboard') ? 'Dashboard'
+                              : onlineUser.page.startsWith('/tickets') ? 'Support'
+                              : onlineUser.page.replace('/', '') || 'Home'
+                              : null;
+                            return (
+                              <tr key={r._id} className="border-b border-slate-800/70 last:border-none hover:bg-white/5 transition-colors">
+                                {/* User */}
+                                <td className="px-4 py-3.5">
+                                  <div className="flex items-center gap-3">
+                                    <div className="relative flex-shrink-0">
+                                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md shadow-indigo-500/20">
+                                        <span className="text-white text-xs font-bold">{r.name?.[0]?.toUpperCase()}</span>
+                                      </div>
+                                      <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-black ${
+                                        status === 'active' ? 'bg-green-400' : status === 'idle' ? 'bg-yellow-400' : 'bg-gray-600'
+                                      }`} />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-white text-sm font-semibold leading-tight">{r.name}</p>
+                                      <p className="text-slate-500 text-xs truncate">{r.email}</p>
+                                    </div>
+                                  </div>
+                                </td>
+                                {/* Wallet */}
+                                <td className="px-4 py-3.5 text-right">
+                                  <span className="text-indigo-400 font-bold">₹{(r.walletBalance ?? r.wallet ?? 0).toFixed(2)}</span>
+                                </td>
+                                {/* Orders */}
+                                <td className="px-4 py-3.5 text-right text-white/70">{r.orderCount}</td>
+                                {/* Spent */}
+                                <td className="px-4 py-3.5 text-right text-emerald-400 font-medium">₹{(r.totalSpent || 0).toFixed(2)}</td>
+                                {/* Online */}
+                                <td className="px-4 py-3.5">
+                                  {!onlineUser ? (
+                                    <span className="text-white/25 text-xs">Offline</span>
+                                  ) : (
+                                    <div>
+                                      <span className={`text-xs font-medium ${status === 'active' ? 'text-emerald-400' : status === 'idle' ? 'text-yellow-400' : 'text-white/30'}`}>
+                                        {status === 'active' ? '🟢 Active' : status === 'idle' ? '🟡 Idle' : '⚫ Offline'}
+                                      </span>
+                                      {pageStr && <p className="text-white/30 text-xs">{pageStr}</p>}
+                                    </div>
+                                  )}
+                                </td>
+                                {/* Joined */}
+                                <td className="px-4 py-3.5 text-slate-500 text-xs whitespace-nowrap">
+                                  {new Date(r.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                </td>
+                                {/* Status */}
+                                <td className="px-4 py-3.5">
+                                  <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                                    r.isActive
+                                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                      : 'bg-red-500/15 text-red-400 border-red-500/30'
+                                  }`}>
+                                    {r.isActive ? 'Active' : 'Banned'}
+                                  </span>
+                                </td>
+                                {/* Actions */}
+                                <td className="px-4 py-3.5">
+                                  <div className="flex gap-1.5">
+                                    <button onClick={() => setFundTarget(r)}
+                                      className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-lg transition-colors font-medium"
+                                      title="Add funds">
+                                      💰 Fund
+                                    </button>
+                                    <button onClick={() => handleToggleUser(r._id)}
+                                      className={`text-xs px-2 py-1 rounded-lg transition-colors ${r.isActive ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'}`}>
+                                      {r.isActive ? 'Ban' : 'Unban'}
+                                    </button>
+                                    <button onClick={() => handleDeleteUser(r._id, r.name)}
+                                      className="text-xs px-2 py-1 rounded-lg bg-rose-900/30 text-rose-400 hover:bg-rose-500/30 transition-colors"
+                                      title="Delete user">
+                                      <i className="pi pi-trash text-xs" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}
 
           {/* ── Payments ── */}
-          {activeTab === 'Payments' && (
-            <div className="glass rounded-2xl p-6 border border-white/10">
-              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-                <h3 className="text-white font-semibold text-lg">All Payments</h3>
-                <button
-                  onClick={() => setActiveTab('Users')}
-                  className="flex items-center gap-2 text-sm px-4 py-2 rounded-xl font-semibold text-white transition-all"
-                  style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
-                >
-                  💰 Add Funds to User
-                </button>
+          {activeTab === 'Payments' && (() => {
+            const q = paymentSearch.trim().toLowerCase();
+            const filteredPayments = q
+              ? payments.filter(p =>
+                  p.userName?.toLowerCase().includes(q) ||
+                  p.userEmail?.toLowerCase().includes(q) ||
+                  p.method?.toLowerCase().includes(q)
+                )
+              : payments;
+
+            const TYPE_STYLE: Record<string, string> = {
+              purchase: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+              topup:    'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+              refund:   'bg-amber-500/15 text-amber-400 border-amber-500/30',
+              fund:     'bg-violet-500/15 text-violet-400 border-violet-500/30',
+            };
+            const STATUS_STYLE: Record<string, string> = {
+              completed: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+              refunded:  'bg-amber-500/15 text-amber-400 border-amber-500/30',
+              failed:    'bg-red-500/15 text-red-400 border-red-500/30',
+            };
+
+            return (
+              <div className="glass rounded-2xl p-6 border border-white/10">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+                  <div>
+                    <h3 className="text-white font-semibold text-lg flex items-center gap-2">
+                      <i className="pi pi-credit-card text-indigo-400" /> All Payments
+                    </h3>
+                    <p className="text-white/40 text-xs mt-0.5">
+                      {q ? `${filteredPayments.length} of ${payments.length} payments` : `${payments.length} total payments`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {/* Search */}
+                    <div className="relative">
+                      <i className="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm pointer-events-none" />
+                      <input
+                        type="text"
+                        value={paymentSearch}
+                        onChange={(e) => setPaymentSearch(e.target.value)}
+                        placeholder="Search by name, email or method…"
+                        className="pl-9 pr-8 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-indigo-500/50 focus:bg-white/8 transition-all w-64"
+                      />
+                      {paymentSearch && (
+                        <button onClick={() => setPaymentSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors">
+                          <i className="pi pi-times text-xs" />
+                        </button>
+                      )}
+                    </div>
+                    {/* Add Funds */}
+                    <button
+                      onClick={() => setActiveTab('Users')}
+                      className="flex items-center gap-2 text-sm px-4 py-2 rounded-xl font-semibold text-white transition-all whitespace-nowrap"
+                      style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
+                    >
+                      💰 Add Funds to User
+                    </button>
+                  </div>
+                </div>
+
+                {/* Table */}
+                {loading ? (
+                  <div className="flex items-center justify-center py-16 text-white/30">
+                    <i className="pi pi-spin pi-spinner text-2xl mr-3" /> Loading payments…
+                  </div>
+                ) : filteredPayments.length === 0 ? (
+                  <div className="text-center py-16 text-white/30">
+                    <i className="pi pi-search text-4xl mb-3 block" />
+                    <p className="text-sm">{q ? `No payments match "${paymentSearch}"` : 'No payments yet'}</p>
+                    {q && <button onClick={() => setPaymentSearch('')} className="text-indigo-400 text-xs mt-2 hover:text-indigo-300">Clear search</button>}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-slate-700/50">
+                    <table className="w-full text-sm min-w-[860px]">
+                      <thead>
+                        <tr className="border-b border-slate-700/60 text-slate-400 text-xs uppercase tracking-wider">
+                          <th className="px-4 py-3 text-left font-medium">User</th>
+                          <th className="px-4 py-3 text-right font-medium">Amount</th>
+                          <th className="px-4 py-3 text-left font-medium">Type</th>
+                          <th className="px-4 py-3 text-left font-medium">Method</th>
+                          <th className="px-4 py-3 text-left font-medium">Status</th>
+                          <th className="px-4 py-3 text-left font-medium">Note</th>
+                          <th className="px-4 py-3 text-left font-medium">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredPayments.map((r) => (
+                          <tr key={r._id} className="border-b border-slate-800/70 last:border-none hover:bg-white/5 transition-colors">
+                            {/* User */}
+                            <td className="px-4 py-3.5">
+                              <div className="flex items-center gap-3">
+                                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-white text-xs font-bold">{r.userName?.[0]?.toUpperCase() || '?'}</span>
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-white text-sm font-semibold leading-tight">{r.userName}</p>
+                                  <p className="text-slate-500 text-xs truncate">{r.userEmail}</p>
+                                </div>
+                              </div>
+                            </td>
+                            {/* Amount */}
+                            <td className="px-4 py-3.5 text-right">
+                              <span className={`font-bold tabular-nums ${r.type === 'purchase' ? 'text-red-400' : 'text-emerald-400'}`}>
+                                {r.type === 'purchase' ? '−' : '+'}₹{r.amount?.toFixed(2)}
+                              </span>
+                            </td>
+                            {/* Type */}
+                            <td className="px-4 py-3.5">
+                              <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border capitalize ${TYPE_STYLE[r.type] ?? TYPE_STYLE.purchase}`}>
+                                {r.type}
+                              </span>
+                            </td>
+                            {/* Method */}
+                            <td className="px-4 py-3.5">
+                              <span className="text-white/60 text-xs capitalize px-2 py-0.5 rounded-lg bg-white/5 border border-white/10">
+                                {r.method}
+                              </span>
+                            </td>
+                            {/* Status */}
+                            <td className="px-4 py-3.5">
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border capitalize ${STATUS_STYLE[r.status] ?? STATUS_STYLE.completed}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${r.status === 'completed' ? 'bg-emerald-400' : r.status === 'refunded' ? 'bg-amber-400' : 'bg-red-400'}`} />
+                                {r.status}
+                              </span>
+                            </td>
+                            {/* Note */}
+                            <td className="px-4 py-3.5 max-w-[200px]">
+                              <span className="text-slate-500 text-xs truncate block">{r.note || '—'}</span>
+                            </td>
+                            {/* Date */}
+                            <td className="px-4 py-3.5 text-slate-500 text-xs whitespace-nowrap">
+                              {new Date(r.timestamp).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-              <DataTable value={payments} loading={loading} paginator rows={10} emptyMessage="No payments">
-                <Column header="User" body={(r) => <span>{r.userName}<br /><span className="text-white/40 text-xs">{r.userEmail}</span></span>} />
-                <Column header="Amount" body={(r) => (
-                  <span className={`font-bold ${r.type === 'topup' || r.type === 'refund' ? 'text-green-400' : 'text-red-400'}`}>
-                    {r.type === 'purchase' ? '-' : '+'}₹{r.amount?.toFixed(2)}
-                  </span>
-                )} />
-                <Column header="Type" body={(r) => <Tag value={r.type} severity={r.type === 'topup' ? 'success' : r.type === 'refund' ? 'warning' : 'info'} />} />
-                <Column header="Method" body={(r) => <span className="text-white/60 text-xs capitalize">{r.method}</span>} />
-                <Column header="Status" body={(r) => <Tag value={r.status} severity={r.status === 'completed' ? 'success' : r.status === 'refunded' ? 'warning' : 'danger'} />} />
-                <Column header="Note" body={(r) => <span className="text-white/40 text-xs">{r.note || '—'}</span>} style={{ maxWidth: '200px' }} />
-                <Column header="Date" body={(r) => <span className="text-white/50 text-sm">{new Date(r.timestamp).toLocaleString()}</span>} />
-              </DataTable>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ── Tickets ── */}
           {activeTab === 'Tickets' && (
             <div className="glass rounded-2xl p-6 border border-white/10">
-              <h3 className="text-white font-semibold text-lg mb-4">Support Tickets</h3>
-              <DataTable
-                value={tickets}
-                loading={loading}
-                paginator
-                rows={10}
-                emptyMessage="No tickets"
-                rowClassName={() => 'cursor-pointer hover:bg-white/5 transition-colors'}
-                onRowClick={(e) => {
-                  markRead('support', e.data._id);
-                  navigate(`/admin/tickets/${e.data._id}`);
-                }}
-              >
-                <Column field="ticketNumber" header="Ticket #" />
-                <Column header="User" body={(r) => <span>{r.user?.name}<br /><span className="text-white/40 text-xs">{r.user?.email}</span></span>} />
-                <Column field="subject" header="Subject" style={{ minWidth: '200px' }} />
-                <Column header="Priority" body={(r) => <Tag value={r.priority} severity={r.priority === 'high' ? 'danger' : r.priority === 'medium' ? 'warning' : 'info'} />} />
-                <Column header="Status" body={(r) => <Tag value={r.status} severity={r.status === 'open' ? 'success' : r.status === 'in-progress' ? 'warning' : 'secondary'} />} />
-                <Column header="Date" body={(r) => <span className="text-white/50 text-sm">{new Date(r.createdAt).toLocaleDateString()}</span>} />
-                <Column header="" body={() => <i className="pi pi-chevron-right text-white/30 text-xs" />} style={{ width: '40px' }} />
-              </DataTable>
+              <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+                <div>
+                  <h3 className="text-white font-semibold text-lg flex items-center gap-2">
+                    <i className="pi pi-ticket text-indigo-400" /> Support Tickets
+                  </h3>
+                  <p className="text-white/40 text-xs mt-0.5">
+                    {ticketSearch.trim()
+                      ? `${tickets.filter(t => t.ticketNumber.toLowerCase().includes(ticketSearch.toLowerCase()) || t.user?.name?.toLowerCase().includes(ticketSearch.toLowerCase()) || t.user?.email?.toLowerCase().includes(ticketSearch.toLowerCase())).length} of ${tickets.length} tickets`
+                      : `${tickets.length} total tickets`}
+                  </p>
+                </div>
+                {/* Search */}
+                <div className="relative">
+                  <i className="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm pointer-events-none" />
+                  <input
+                    type="text"
+                    value={ticketSearch}
+                    onChange={(e) => setTicketSearch(e.target.value)}
+                    placeholder="Search by ticket ID, name or email…"
+                    className="pl-9 pr-8 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-indigo-500/50 focus:bg-white/8 transition-all w-72"
+                  />
+                  {ticketSearch && (
+                    <button onClick={() => setTicketSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors">
+                      <i className="pi pi-times text-xs" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="flex items-center justify-center py-16 text-white/30">
+                  <i className="pi pi-spin pi-spinner text-2xl mr-3" /> Loading tickets…
+                </div>
+              ) : tickets.length === 0 ? (
+                <div className="text-center py-16 text-white/30">
+                  <i className="pi pi-inbox text-4xl mb-3 block" />
+                  <p className="text-sm">No tickets yet</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-slate-700/50">
+                  <table className="w-full text-sm min-w-[700px]">
+                    <thead>
+                      <tr className="border-b border-slate-700/60 text-slate-400 text-xs uppercase tracking-wider">
+                        <th className="px-4 py-3 text-left font-medium">Ticket #</th>
+                        <th className="px-4 py-3 text-left font-medium">From</th>
+                        <th className="px-4 py-3 text-left font-medium">Subject</th>
+                        <th className="px-4 py-3 text-left font-medium">Priority</th>
+                        <th className="px-4 py-3 text-left font-medium">Status</th>
+                        <th className="px-4 py-3 text-left font-medium">Date</th>
+                        <th className="px-4 py-3 w-8" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const q = ticketSearch.trim().toLowerCase();
+                        const filtered = q
+                          ? tickets.filter(t =>
+                              t.ticketNumber.toLowerCase().includes(q) ||
+                              t.user?.name?.toLowerCase().includes(q) ||
+                              t.user?.email?.toLowerCase().includes(q)
+                            )
+                          : tickets;
+                        if (filtered.length === 0) return (
+                          <tr>
+                            <td colSpan={7} className="px-4 py-14 text-center text-slate-500 text-sm">
+                              <i className="pi pi-search text-3xl mb-3 block opacity-40" />
+                              No tickets match "{ticketSearch}"
+                              <button onClick={() => setTicketSearch('')} className="block mx-auto mt-2 text-indigo-400 text-xs hover:text-indigo-300">Clear search</button>
+                            </td>
+                          </tr>
+                        );
+                        return filtered.map((t) => {
+                        const priorityStyle: Record<string, string> = {
+                          high:   'bg-red-500/15 text-red-400 border-red-500/30',
+                          medium: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+                          low:    'bg-sky-500/15 text-sky-400 border-sky-500/30',
+                        };
+                        const statusStyle: Record<string, string> = {
+                          open:        'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+                          'in-progress':'bg-blue-500/15 text-blue-400 border-blue-500/30',
+                          closed:      'bg-slate-500/15 text-slate-400 border-slate-500/30',
+                        };
+                        const initials = t.user?.name
+                          ? t.user.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+                          : '?';
+                        return (
+                          <tr
+                            key={t._id}
+                            onClick={() => { markRead('support', t._id); navigate(`/admin/tickets/${t._id}`); }}
+                            className="border-b border-slate-800/70 last:border-none hover:bg-white/5 transition-colors cursor-pointer group"
+                          >
+                            {/* Ticket # */}
+                            <td className="px-4 py-3.5">
+                              <span className="font-mono text-xs text-slate-400">{t.ticketNumber}</span>
+                            </td>
+
+                            {/* From — avatar + name + email */}
+                            <td className="px-4 py-3.5">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-md shadow-indigo-500/20">
+                                  <span className="text-white text-xs font-bold">{initials}</span>
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-white text-sm font-semibold leading-tight truncate">
+                                    {t.user?.name || 'Unknown User'}
+                                  </p>
+                                  <p className="text-slate-500 text-xs truncate">{t.user?.email}</p>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Subject */}
+                            <td className="px-4 py-3.5 max-w-[220px]">
+                              <span className="text-white/80 text-sm truncate block">{t.subject}</span>
+                            </td>
+
+                            {/* Priority */}
+                            <td className="px-4 py-3.5">
+                              <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border capitalize ${priorityStyle[t.priority] ?? priorityStyle.low}`}>
+                                {t.priority}
+                              </span>
+                            </td>
+
+                            {/* Status */}
+                            <td className="px-4 py-3.5">
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border capitalize ${statusStyle[t.status] ?? statusStyle.closed}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${t.status === 'open' ? 'bg-emerald-400 animate-pulse' : t.status === 'in-progress' ? 'bg-blue-400' : 'bg-slate-500'}`} />
+                                {t.status}
+                              </span>
+                            </td>
+
+                            {/* Date */}
+                            <td className="px-4 py-3.5 text-slate-500 text-xs whitespace-nowrap">
+                              {new Date(t.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </td>
+
+                            {/* Arrow */}
+                            <td className="px-4 py-3.5">
+                              <i className="pi pi-chevron-right text-white/20 text-xs group-hover:text-white/50 transition-colors" />
+                            </td>
+                          </tr>
+                        );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 

@@ -1,11 +1,24 @@
-import { defineConfig } from 'vite';
+import { defineConfig, createLogger } from 'vite';
 import react from '@vitejs/plugin-react';
+
+// Suppress noisy WebSocket proxy errors (ECONNRESET, ECONNABORTED) —
+// these are harmless and happen whenever the browser closes a connection.
+const logger = createLogger();
+const originalWarn = logger.warn.bind(logger);
+logger.warn = (msg, opts) => {
+  if (msg.includes('ECONNRESET') || msg.includes('ECONNABORTED') || msg.includes('ws proxy')) return;
+  originalWarn(msg, opts);
+};
+const originalError = logger.error.bind(logger);
+logger.error = (msg, opts) => {
+  if (msg.includes('ECONNRESET') || msg.includes('ECONNABORTED') || msg.includes('ws proxy')) return;
+  originalError(msg, opts);
+};
 
 const suppressProxyErrors = (proxy: any) => {
   proxy.on('error', () => {});
   proxy.on('proxyReqWs', (_proxyReq: any, _req: any, socket: any) => {
     socket.on('error', () => {});
-    socket.destroy();
   });
   proxy.on('proxyRes', (_proxyRes: any, _req: any, res: any) => {
     res.on('error', () => {});
@@ -17,6 +30,7 @@ const suppressProxyErrors = (proxy: any) => {
 };
 
 export default defineConfig({
+  customLogger: logger,
   plugins: [react()],
   server: {
     port: 5173,

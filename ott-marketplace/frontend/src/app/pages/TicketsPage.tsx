@@ -30,6 +30,7 @@ export default function TicketsPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const { register, handleSubmit, reset, formState: { errors } } = useForm<NewTicketForm>();
   const { markRead } = useNotifications();
 
@@ -103,6 +104,28 @@ export default function TicketsPage() {
           </button>
         </motion.div>
 
+        {/* Search bar */}
+        {!showForm && tickets.length > 0 && (
+          <div className="relative mb-5">
+            <i className="pi pi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30 text-sm pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by ticket ID or subject…"
+              className="w-full pl-10 pr-9 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-indigo-500/50 focus:bg-white/8 transition-all"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+              >
+                <i className="pi pi-times text-xs" />
+              </button>
+            )}
+          </div>
+        )}
+
         {/* New ticket form */}
         <AnimatePresence>
           {showForm && (
@@ -162,7 +185,22 @@ export default function TicketsPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {tickets.map((ticket) => (
+            {(() => {
+              const q = search.trim().toLowerCase();
+              const filtered = q
+                ? tickets.filter(t =>
+                    t.ticketNumber.toLowerCase().includes(q) ||
+                    t.subject.toLowerCase().includes(q)
+                  )
+                : tickets;
+              if (filtered.length === 0) return (
+                <div className="text-center py-16 text-white/30">
+                  <i className="pi pi-search text-4xl mb-3 block" />
+                  <p className="text-sm">No tickets match "{search}"</p>
+                  <button onClick={() => setSearch('')} className="text-indigo-400 text-xs mt-2 hover:text-indigo-300">Clear search</button>
+                </div>
+              );
+              return filtered.map((ticket) => (
               <motion.div
                 key={ticket._id}
                 className="glass rounded-2xl p-5 border border-white/10 cursor-pointer hover:border-indigo-500/30 transition-all duration-200"
@@ -187,7 +225,8 @@ export default function TicketsPage() {
                   </div>
                 </div>
               </motion.div>
-            ))}
+              ));
+            })()}
           </div>
         )}
       </div>
