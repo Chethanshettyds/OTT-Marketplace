@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DataTable } from 'primereact/datatable';
@@ -13,6 +13,7 @@ import BroadcastModal from '../components/BroadcastModal';
 import FundWalletModal from '../components/FundWalletModal';
 import { useNotifications } from '../hooks/useNotifications';
 import LiveUsersPanel, { OnlineUser } from '../components/LiveUsersPanel';
+import OrdersSearchBar, { FilterField } from '../components/OrdersSearchBar';
 
 const TABS = ['Dashboard', 'Products', 'Orders', 'Users', 'Payments', 'Tickets', 'Broadcast', 'Settings'];
 
@@ -95,6 +96,38 @@ export default function AdminPanel() {
   const [fundTarget, setFundTarget] = useState<User | null>(null);
   const { counts, markRead } = useNotifications();
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
+
+  // ── Admin Orders search ───────────────────────────────────────────────────
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderFilterField, setOrderFilterField] = useState<FilterField>('orderId');
+  const [orderPage, setOrderPage] = useState(1);
+  const ORDER_PAGE_SIZE = 10;
+
+  const filteredOrders = useMemo(() => {
+    const t = orderSearch.trim().toLowerCase();
+    if (!t) return orders;
+    return orders.filter((o) => {
+      if (orderFilterField === 'orderId')  return o.orderNumber.toLowerCase().includes(t);
+      if (orderFilterField === 'product')  return o.productSnapshot?.name?.toLowerCase().includes(t);
+      if (orderFilterField === 'duration') return (o.productSnapshot as any)?.duration?.toLowerCase().includes(t);
+      if (orderFilterField === 'user')     return o.user?.name?.toLowerCase().includes(t);
+      if (orderFilterField === 'email')    return o.user?.email?.toLowerCase().includes(t);
+      return false;
+    });
+  }, [orders, orderSearch, orderFilterField]);
+
+  const orderTotalPages = Math.max(1, Math.ceil(filteredOrders.length / ORDER_PAGE_SIZE));
+  const paginatedOrders = filteredOrders.slice((orderPage - 1) * ORDER_PAGE_SIZE, orderPage * ORDER_PAGE_SIZE);
+
+  const ADMIN_ORDER_FILTERS: FilterField[] = ['orderId', 'product', 'duration', 'user', 'email'];
+
+  const STATUS_STYLES: Record<string, string> = {
+    delivered:  'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
+    processing: 'bg-blue-500/15    text-blue-300    border-blue-500/40',
+    pending:    'bg-amber-500/15   text-amber-300   border-amber-500/40',
+    refunded:   'bg-rose-500/15    text-rose-300    border-rose-500/40',
+    cancelled:  'bg-rose-500/15    text-rose-300    border-rose-500/40',
+  };
 
   useEffect(() => { fetchStats(); }, []);
 
@@ -429,34 +462,106 @@ export default function AdminPanel() {
           {activeTab === 'Orders' && (
             <div className="glass rounded-2xl p-6 border border-white/10">
               <h3 className="text-white font-semibold text-lg mb-4">All Orders</h3>
-              <DataTable value={orders} loading={loading} paginator rows={10} emptyMessage="No orders">
-                <Column field="orderNumber" header="Order #" style={{ minWidth: '160px' }} />
-                <Column header="User" body={(r) => <span>{r.user?.name}<br /><span className="text-white/40 text-xs">{r.user?.email}</span></span>} />
-                <Column header="Product" body={(r) => <span>{r.productSnapshot?.name}</span>} />
-                <Column header="Amount" body={(r) => <span className="text-indigo-400 font-bold">₹{r.amount}</span>} />
-                <Column header="Method" body={(r) => <span className="text-white/60 text-xs capitalize">{r.paymentDetails?.method || 'wallet'}</span>} />
-                <Column header="Status" body={(r) => (
-                  <Tag value={r.status} severity={r.status === 'delivered' ? 'success' : r.status === 'cancelled' ? 'danger' : r.status === 'refunded' ? 'warning' : 'info'} />
-                )} />
-                <Column header="Refund" body={(r) => r.isRefunded ? <Tag value="Refunded" severity="warning" /> : <span className="text-white/30 text-xs">—</span>} />
-                <Column header="Actions" body={(r) => (
-                  <div className="flex gap-1 flex-wrap">
-                    {r.status !== 'cancelled' && r.status !== 'delivered' && (
-                      <button onClick={() => handleOrderStatus(r._id, 'delivered')} className="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30">
-                        Deliver
-                      </button>
-                    )}
-                    {r.status !== 'cancelled' && (
-                      <button onClick={() => handleOrderStatus(r._id, 'cancelled')} className="text-xs px-2 py-1 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30">
-                        Cancel
-                      </button>
-                    )}
-                    {r.status === 'cancelled' && (
-                      <span className="text-xs text-white/30 italic">Locked</span>
-                    )}
+
+              <OrdersSearchBar
+                filters={ADMIN_ORDER_FILTERS}
+                totalCount={orders.length}
+                filteredCount={filteredOrders.length}
+                onSearch={(term, field) => { setOrderSearch(term); setOrderFilterField(field); setOrderPage(1); }}
+                onClear={() => { setOrderSearch(''); setOrderFilterField('orderId'); setOrderPage(1); }}
+              />
+
+              {loading ? (
+                <div className="flex items-center justify-center py-16 text-white/30">
+                  <i className="pi pi-spin pi-spinner text-2xl mr-3" /> Loading orders…
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto rounded-xl border border-slate-700/50 relative">
+                    <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-slate-900/80 to-transparent sm:hidden" />
+                    <table className="w-full text-sm min-w-[800px]">
+                      <thead>
+                        <tr className="border-b border-slate-700/60 text-slate-400 text-xs uppercase tracking-wider">
+                          <th className="px-4 py-3 text-left font-medium">Order #</th>
+                          <th className="px-4 py-3 text-left font-medium">User</th>
+                          <th className="px-4 py-3 text-left font-medium">Product</th>
+                          <th className="px-4 py-3 text-right font-medium">Amount</th>
+                          <th className="px-4 py-3 text-left font-medium">Method</th>
+                          <th className="px-4 py-3 text-left font-medium">Status</th>
+                          <th className="px-4 py-3 text-left font-medium">Refund</th>
+                          <th className="px-4 py-3 text-left font-medium">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedOrders.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="px-4 py-12 text-center text-slate-500 text-sm">
+                              No orders match your search.
+                            </td>
+                          </tr>
+                        ) : paginatedOrders.map((r) => (
+                          <tr key={r._id} className="border-b border-slate-800/70 last:border-none hover:bg-slate-900/60 transition-colors">
+                            <td className="px-4 py-3.5 font-mono text-xs text-slate-400 whitespace-nowrap">{r.orderNumber}</td>
+                            <td className="px-4 py-3.5 whitespace-nowrap">
+                              <span className="text-white text-sm font-medium">{r.user?.name}</span>
+                              <br />
+                              <span className="text-slate-500 text-xs">{r.user?.email}</span>
+                            </td>
+                            <td className="px-4 py-3.5 text-white whitespace-nowrap">{r.productSnapshot?.name}</td>
+                            <td className="px-4 py-3.5 text-right font-semibold text-violet-200 whitespace-nowrap">₹{r.amount}</td>
+                            <td className="px-4 py-3.5 text-slate-400 text-xs capitalize whitespace-nowrap">{r.paymentDetails?.method || 'wallet'}</td>
+                            <td className="px-4 py-3.5">
+                              <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border capitalize
+                                ${STATUS_STYLES[r.status] ?? 'bg-slate-500/15 text-slate-300 border-slate-500/40'}`}>
+                                {r.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5">
+                              {r.isRefunded
+                                ? <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-amber-500/15 text-amber-300 border-amber-500/40">Refunded</span>
+                                : <span className="text-slate-600 text-xs">—</span>}
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <div className="flex gap-1 flex-wrap">
+                                {r.status !== 'cancelled' && r.status !== 'delivered' && (
+                                  <button onClick={() => handleOrderStatus(r._id, 'delivered')}
+                                    className="text-xs px-2.5 py-1 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/25 transition-colors">
+                                    Deliver
+                                  </button>
+                                )}
+                                {r.status !== 'cancelled' && (
+                                  <button onClick={() => handleOrderStatus(r._id, 'cancelled')}
+                                    className="text-xs px-2.5 py-1 bg-rose-500/15 text-rose-400 border border-rose-500/30 rounded-lg hover:bg-rose-500/25 transition-colors">
+                                    Cancel
+                                  </button>
+                                )}
+                                {r.status === 'cancelled' && (
+                                  <span className="text-xs text-slate-600 italic">Locked</span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                )} />
-              </DataTable>
+
+                  {/* Admin orders pagination */}
+                  <div className="flex items-center justify-end gap-1 mt-4 text-xs text-slate-400">
+                    <button onClick={() => setOrderPage(1)} disabled={orderPage === 1}
+                      className="px-2 py-1.5 rounded-lg hover:bg-slate-800/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">«</button>
+                    <button onClick={() => setOrderPage((p) => Math.max(1, p - 1))} disabled={orderPage === 1}
+                      className="px-2 py-1.5 rounded-lg hover:bg-slate-800/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">‹</button>
+                    <span className="px-3 py-1 rounded-lg bg-slate-800/60 text-slate-200 font-medium min-w-[60px] text-center">
+                      {orderPage} / {orderTotalPages}
+                    </span>
+                    <button onClick={() => setOrderPage((p) => Math.min(orderTotalPages, p + 1))} disabled={orderPage === orderTotalPages}
+                      className="px-2 py-1.5 rounded-lg hover:bg-slate-800/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">›</button>
+                    <button onClick={() => setOrderPage(orderTotalPages)} disabled={orderPage === orderTotalPages}
+                      className="px-2 py-1.5 rounded-lg hover:bg-slate-800/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">»</button>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
