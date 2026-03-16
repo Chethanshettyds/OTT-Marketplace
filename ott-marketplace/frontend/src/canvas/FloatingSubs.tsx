@@ -18,8 +18,20 @@ function SubCard({ position, platform, price, colorFrom, colorTo, index, onClick
   const meshRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
 
-  const color1 = useMemo(() => new THREE.Color(colorFrom), [colorFrom]);
-  const color2 = useMemo(() => new THREE.Color(colorTo), [colorTo]);
+  // Strip alpha from 8-digit hex (#RRGGBBAA → #RRGGBB) so THREE.Color doesn't crash
+  const safeColor = (hex: string) => {
+    if (!hex) return '#6366f1';
+    const h = hex.trim();
+    if (h.startsWith('#') && h.length === 9) return h.slice(0, 7);
+    return h;
+  };
+
+  const color1 = useMemo(() => {
+    try { return new THREE.Color(safeColor(colorFrom)); } catch { return new THREE.Color('#6366f1'); }
+  }, [colorFrom]);
+  const color2 = useMemo(() => {
+    try { return new THREE.Color(safeColor(colorTo)); } catch { return new THREE.Color('#8b5cf6'); }
+  }, [colorTo]);
 
   useFrame((state: { clock: { elapsedTime: number } }) => {
     if (!meshRef.current) return;
@@ -72,7 +84,7 @@ function SubCard({ position, platform, price, colorFrom, colorTo, index, onClick
       <Text
         position={[0, -0.35, 0.06]}
         fontSize={0.18}
-        color="rgba(255,255,255,0.8)"
+        color="#cccccc"
         anchorX="center"
         anchorY="middle"
       >

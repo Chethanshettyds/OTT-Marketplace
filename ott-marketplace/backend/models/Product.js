@@ -70,6 +70,26 @@ productSchema.pre(/^find/, function (next) {
   next();
 });
 
+// Strip alpha from 8-digit hex colors before saving (#RRGGBBAA → #RRGGBB)
+function stripAlpha(hex) {
+  if (typeof hex === 'string' && hex.startsWith('#') && hex.length === 9) return hex.slice(0, 7);
+  return hex;
+}
+productSchema.pre('save', function (next) {
+  if (this.gradientFrom) this.gradientFrom = stripAlpha(this.gradientFrom);
+  if (this.gradientTo) this.gradientTo = stripAlpha(this.gradientTo);
+  if (this.color) this.color = stripAlpha(this.color);
+  next();
+});
+productSchema.pre('findOneAndUpdate', function (next) {
+  const u = this.getUpdate();
+  if (u?.$set?.gradientFrom) u.$set.gradientFrom = stripAlpha(u.$set.gradientFrom);
+  if (u?.$set?.gradientTo) u.$set.gradientTo = stripAlpha(u.$set.gradientTo);
+  if (u?.gradientFrom) u.gradientFrom = stripAlpha(u.gradientFrom);
+  if (u?.gradientTo) u.gradientTo = stripAlpha(u.gradientTo);
+  next();
+});
+
 productSchema.virtual('stockStatus').get(function () {
   if (this.stock === 0) return 'out_of_stock';
   if (this.stock <= 5) return 'low_stock';

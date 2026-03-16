@@ -1,8 +1,22 @@
-import { Suspense, useRef } from 'react';
+import { Suspense, useRef, Component, ReactNode } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Stars, Environment, Float } from '@react-three/drei';
 import * as THREE from 'three';
 import FloatingSubs from './FloatingSubs';
+
+// Error boundary so a WebGL crash doesn't blank the whole page
+class CanvasErrorBoundary extends Component<{ children: ReactNode }, { crashed: boolean }> {
+  state = { crashed: false };
+  static getDerivedStateFromError() { return { crashed: true }; }
+  render() {
+    if (this.state.crashed) return (
+      <div className="flex items-center justify-center h-full text-white/30 text-sm">
+        3D view unavailable
+      </div>
+    );
+    return this.props.children;
+  }
+}
 
 function CameraRig() {
   const vec = new THREE.Vector3();
@@ -57,35 +71,42 @@ interface Scene3DProps {
 export default function Scene3D({ products, onSelect, height = '600px' }: Scene3DProps) {
   return (
     <div style={{ height, width: '100%' }}>
-      <Canvas
-        camera={{ position: [0, 0, 8], fov: 60 }}
-        gl={{ antialias: true, alpha: true }}
-        dpr={[1, 1.5]}
-      >
-        <Suspense fallback={null}>
-          <ambientLight intensity={0.3} />
-          <pointLight position={[10, 10, 10]} intensity={1} color="#6366f1" />
-          <pointLight position={[-10, -10, -10]} intensity={0.5} color="#a855f7" />
-          <spotLight position={[0, 10, 0]} intensity={0.8} color="#3b82f6" angle={0.5} />
+      <CanvasErrorBoundary>
+        <Canvas
+          camera={{ position: [0, 0, 8], fov: 60 }}
+          gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
+          dpr={[1, 1.5]}
+          onCreated={({ gl }) => {
+            gl.domElement.addEventListener('webglcontextlost', (e) => {
+              e.preventDefault();
+            });
+          }}
+        >
+          <Suspense fallback={null}>
+            <ambientLight intensity={0.3} />
+            <pointLight position={[10, 10, 10]} intensity={1} color="#6366f1" />
+            <pointLight position={[-10, -10, -10]} intensity={0.5} color="#a855f7" />
+            <spotLight position={[0, 10, 0]} intensity={0.8} color="#3b82f6" angle={0.5} />
 
-          <Stars radius={80} depth={50} count={3000} factor={3} saturation={0} fade speed={1} />
-          <ParticleField />
+            <Stars radius={80} depth={50} count={3000} factor={3} saturation={0} fade speed={1} />
+            <ParticleField />
 
-          <Float speed={1.5} rotationIntensity={0.2} floatIntensity={0.5}>
-            <FloatingSubs products={products} onSelect={onSelect} />
-          </Float>
+            <Float speed={1.5} rotationIntensity={0.2} floatIntensity={0.5}>
+              <FloatingSubs products={products} onSelect={onSelect} />
+            </Float>
 
-          <CameraRig />
-          <OrbitControls
-            enableZoom={false}
-            enablePan={false}
-            autoRotate={false}
-            maxPolarAngle={Math.PI / 1.5}
-            minPolarAngle={Math.PI / 3}
-          />
-          <Environment preset="night" />
-        </Suspense>
-      </Canvas>
+            <CameraRig />
+            <OrbitControls
+              enableZoom={false}
+              enablePan={false}
+              autoRotate={false}
+              maxPolarAngle={Math.PI / 1.5}
+              minPolarAngle={Math.PI / 3}
+            />
+            <Environment preset="night" />
+          </Suspense>
+        </Canvas>
+      </CanvasErrorBoundary>
     </div>
   );
 }
