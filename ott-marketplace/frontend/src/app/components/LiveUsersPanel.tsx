@@ -14,6 +14,7 @@ export interface OnlineUser {
 
 interface Props {
   onUsersChange?: (users: OnlineUser[]) => void;
+  externalUsers?: OnlineUser[];
 }
 
 function pageLabel(path: string) {
@@ -40,21 +41,23 @@ const STATUS_DOT: Record<string, string> = {
 
 let panelSocket: Socket | null = null;
 
-export default function LiveUsersPanel({ onUsersChange }: Props) {
-  const [users, setUsers] = useState<OnlineUser[]>([]);
+export default function LiveUsersPanel({ onUsersChange, externalUsers }: Props) {
+  const [internalUsers, setInternalUsers] = useState<OnlineUser[]>([]);
   const [collapsed, setCollapsed] = useState(false);
 
+  // Use external users if provided (parent manages socket), else own socket
+  const users = externalUsers ?? internalUsers;
+
   useEffect(() => {
+    if (externalUsers) return; // parent handles socket
     if (!panelSocket) {
       panelSocket = io('/', { path: '/socket.io', transports: ['websocket'] });
     }
     panelSocket.emit('join_admin');
-
     panelSocket.on('online_users_update', ({ users: u }: { users: OnlineUser[]; count: number }) => {
-      setUsers(u);
+      setInternalUsers(u);
       onUsersChange?.(u);
     });
-
     return () => {
       panelSocket?.off('online_users_update');
     };

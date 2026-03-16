@@ -4,6 +4,17 @@ const User = require('../models/User');
 const Payment = require('../models/Payment');
 const { sendMail, orderConfirmationMail, orderDeliveredMail } = require('../utils/mailer');
 
+// Parse duration string like "1 Month", "3 Months", "1 Year" → days
+function parseDurationDays(duration = '') {
+  const d = duration.toLowerCase();
+  const num = parseInt(d) || 1;
+  if (d.includes('year')) return num * 365;
+  if (d.includes('month')) return num * 30;
+  if (d.includes('week')) return num * 7;
+  if (d.includes('day')) return num;
+  return 30; // default 1 month
+}
+
 exports.createOrder = async (req, res) => {
   try {
     const { productId } = req.body;
@@ -56,6 +67,22 @@ exports.createOrder = async (req, res) => {
       transactionId,
       note: `Purchase: ${product.name}`,
     });
+
+    // Create active subscription entry
+    const durationDays = parseDurationDays(product.duration);
+    user.activeSubscriptions = user.activeSubscriptions || [];
+    user.activeSubscriptions.push({
+      productId: product._id,
+      orderId: order._id,
+      productName: product.name,
+      platform: product.platform || '',
+      duration: product.duration || '1 Month',
+      durationDays,
+      startDate: new Date(),
+      expiryDate: new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000),
+      status: 'active',
+    });
+    await user.save({ validateBeforeSave: false });
 
     res.status(201).json({ order, newBalance: user.wallet });
 

@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../hooks/useAuth';
 import { useWallet } from '../hooks/useWallet';
 import WalletTopupModal from '../components/WalletTopupModal';
 import OrderHistoryTable from '../components/OrderHistoryTable';
+import ActiveSubsCard, { type Subscription } from '../components/ActiveSubsCard';
+import SubscriptionsModal from '../components/SubscriptionsModal';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
@@ -23,18 +25,35 @@ const tabs = ['Overview', 'Orders', 'Profile'];
 
 export default function UserDashboard() {
   const { user } = useAuth();
-  const { balance } = useWallet();
   const { updateUser } = useAuthStore();
   const { format } = useCurrency();
   const [activeTab, setActiveTab] = useState('Overview');
   const [walletOpen, setWalletOpen] = useState(false);
+  const [subsOpen, setSubsOpen] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  const [subs, setSubs] = useState<Subscription[]>([]);
+  const [subsCount, setSubsCount] = useState(0);
+  const [subsLoading, setSubsLoading] = useState(true);
   const { register, handleSubmit, formState: { errors } } = useForm({ defaultValues: { name: user?.name || '' } });
 
+  const fetchSubs = useCallback(async () => {
+    setSubsLoading(true);
+    try {
+      const { data } = await api.get('/user/subscriptions/active');
+      setSubs(data.subscriptions || []);
+      setSubsCount(data.count || 0);
+    } catch {
+      // silent
+    } finally {
+      setSubsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    if (activeTab === 'Orders') fetchOrders();
-  }, [activeTab]);
+    fetchSubs();
+    fetchOrders();
+  }, [fetchSubs]);
 
   const fetchOrders = async () => {
     setOrdersLoading(true);
@@ -61,7 +80,6 @@ export default function UserDashboard() {
   const stats = [
     { label: 'Wallet Balance', value: format(user?.wallet ?? 0), icon: 'pi-wallet', color: 'from-indigo-500 to-purple-600' },
     { label: 'Total Orders', value: orders.length || '—', icon: 'pi-shopping-bag', color: 'from-blue-500 to-cyan-500' },
-    { label: 'Active Subs', value: orders.filter((o) => o.status === 'delivered').length || '—', icon: 'pi-check-circle', color: 'from-green-500 to-emerald-500' },
     { label: 'Member Since', value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en', { month: 'short', year: 'numeric' }) : '—', icon: 'pi-calendar', color: 'from-orange-500 to-pink-500' },
   ];
 
@@ -83,16 +101,13 @@ export default function UserDashboard() {
               <p className="text-white/40 text-sm">{user?.email}</p>
             </div>
           </div>
-          <button
-            onClick={() => setWalletOpen(true)}
-            className="btn-primary flex items-center gap-2"
-          >
+          <button onClick={() => setWalletOpen(true)} className="btn-primary flex items-center gap-2">
             <i className="pi pi-plus text-sm" />
             Top Up
           </button>
         </motion.div>
 
-        {/* Stats */}
+        {/* Stats row + Active Subs card */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {stats.map((stat, i) => (
             <motion.div
@@ -109,6 +124,15 @@ export default function UserDashboard() {
               <div className="text-white/40 text-xs mt-0.5">{stat.label}</div>
             </motion.div>
           ))}
+          {/* Active Subs card spans full width on mobile, 1 col on lg */}
+          <div className="col-span-2 lg:col-span-1">
+            <ActiveSubsCard
+              onClick={() => setSubsOpen(true)}
+              subs={subs}
+              count={subsCount}
+              loading={subsLoading}
+            />
+          </div>
         </div>
 
         {/* Tabs */}
@@ -216,6 +240,12 @@ export default function UserDashboard() {
       </div>
 
       <WalletTopupModal isOpen={walletOpen} onClose={() => setWalletOpen(false)} />
+      <SubscriptionsModal
+        isOpen={subsOpen}
+        onClose={() => setSubsOpen(false)}
+        subs={subs}
+        onRefresh={fetchSubs}
+      />
     </div>
   );
 }

@@ -5,7 +5,15 @@ const suppressProxyErrors = (proxy: any) => {
   proxy.on('error', () => {});
   proxy.on('proxyReqWs', (_proxyReq: any, _req: any, socket: any) => {
     socket.on('error', () => {});
+    socket.destroy();
   });
+  proxy.on('proxyRes', (_proxyRes: any, _req: any, res: any) => {
+    res.on('error', () => {});
+  });
+  proxy.on('open', (proxySocket: any) => {
+    proxySocket.on('error', () => {});
+  });
+  proxy.on('close', () => {});
 };
 
 export default defineConfig({

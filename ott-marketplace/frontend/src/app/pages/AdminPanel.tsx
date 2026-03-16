@@ -12,6 +12,7 @@ import { PAYMENT_TYPES } from '../utils/paymentTypes';
 import BroadcastModal from '../components/BroadcastModal';
 import FundWalletModal from '../components/FundWalletModal';
 import { useNotifications } from '../hooks/useNotifications';
+import { io as socketIO } from 'socket.io-client';
 import LiveUsersPanel, { OnlineUser } from '../components/LiveUsersPanel';
 import OrdersSearchBar, { FilterField } from '../components/OrdersSearchBar';
 
@@ -96,6 +97,16 @@ export default function AdminPanel() {
   const [fundTarget, setFundTarget] = useState<User | null>(null);
   const { counts, markRead } = useNotifications();
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
+
+  // Connect to socket for live users as soon as AdminPanel mounts
+  useEffect(() => {
+    const sock = socketIO('/', { path: '/socket.io', transports: ['websocket'] });
+    sock.emit('join_admin');
+    sock.on('online_users_update', ({ users: u }: { users: OnlineUser[]; count: number }) => {
+      setOnlineUsers(u);
+    });
+    return () => { sock.disconnect(); };
+  }, []);
 
   // ── Admin Orders search ───────────────────────────────────────────────────
   const [orderSearch, setOrderSearch] = useState('');
@@ -578,7 +589,7 @@ export default function AdminPanel() {
           {activeTab === 'Users' && (
             <div className="space-y-4">
               {/* Live Users Panel */}
-              <LiveUsersPanel onUsersChange={setOnlineUsers} />
+              <LiveUsersPanel externalUsers={onlineUsers} />
 
               <div className="glass rounded-2xl p-6 border border-white/10">
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-3">

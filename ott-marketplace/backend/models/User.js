@@ -1,6 +1,21 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
+const activeSubscriptionSchema = new mongoose.Schema(
+  {
+    productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
+    orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order' },
+    productName: { type: String, required: true },
+    platform: { type: String, default: '' },
+    duration: { type: String, default: '1 Month' },
+    durationDays: { type: Number, default: 30 },
+    startDate: { type: Date, default: Date.now },
+    expiryDate: { type: Date, required: true },
+    status: { type: String, enum: ['active', 'expired', 'cancelled'], default: 'active' },
+  },
+  { _id: true, timestamps: true }
+);
+
 const paymentMethodSchema = new mongoose.Schema(
   {
     type: {
@@ -28,6 +43,7 @@ const userSchema = new mongoose.Schema(
     isActive: { type: Boolean, default: true },
     lastLogin: { type: Date },
     paymentMethods: [paymentMethodSchema],
+    activeSubscriptions: [activeSubscriptionSchema],
   },
   { timestamps: true }
 );
