@@ -1,28 +1,43 @@
 const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
+// ── Resend (HTTPS API — works on Render free tier) ────────────────────────────
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+
+// ── Nodemailer fallback (local dev only) ──────────────────────────────────────
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
   port: 587,
-  secure: false, // STARTTLS
+  secure: false,
   auth: {
     user: process.env.NODEMAILER_USER,
     pass: process.env.NODEMAILER_PASS,
   },
-  tls: {
-    rejectUnauthorized: false,
-  },
+  tls: { rejectUnauthorized: false },
 });
 
-// Verify connection on startup (logs to console, doesn't crash server)
-transporter.verify((err) => {
-  if (err) console.error('❌ Mailer error:', err.message);
-  else console.log('✅ Mailer ready');
-});
+// Verify nodemailer only in dev
+if (!resend) {
+  transporter.verify((err) => {
+    if (err) console.error('❌ Mailer error:', err.message);
+    else console.log('✅ Mailer ready (nodemailer)');
+  });
+} else {
+  console.log('✅ Mailer ready (Resend)');
+}
 
 /**
  * sendMail({ to, subject, html })
+ * Uses Resend in production, nodemailer in dev
  */
 async function sendMail({ to, subject, html }) {
+  if (resend) {
+    const from = process.env.RESEND_FROM || 'OTTMarket <onboarding@resend.dev>';
+    const { error } = await resend.emails.send({ from, to, subject, html });
+    if (error) throw new Error(error.message);
+    return;
+  }
+  // fallback: nodemailer
   return transporter.sendMail({
     from: process.env.NODEMAILER_FROM || `OTTMarket <${process.env.NODEMAILER_USER}>`,
     to,
