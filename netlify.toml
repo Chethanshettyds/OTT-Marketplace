@@ -1,7 +1,7 @@
 [build]
   base    = "ott-marketplace/frontend"
   command = "npm run build"
-  publish = "ott-marketplace/frontend/dist"
+  publish = "dist"
 
 [[redirects]]
   from   = "/*"
