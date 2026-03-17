@@ -31,6 +31,50 @@ function detectIntent(msg) {
   return 'general';
 }
 
+// ── Order Status Lookup ───────────────────────────────────────────────────────
+exports.lookupOrder = async (req, res) => {
+  const { orderNumber } = req.body;
+  if (!orderNumber) return res.status(400).json({ error: 'orderNumber required' });
+
+  try {
+    // Normalise: strip spaces, uppercase
+    const normalised = orderNumber.trim().toUpperCase();
+
+    const order = await Order.findOne({
+      user: req.user._id,
+      orderNumber: normalised,
+    }).select('orderNumber status amount productSnapshot createdAt isRefunded refundStatus');
+
+    if (!order) {
+      return res.json({
+        found: false,
+        message: `No order found with ID **${normalised}** on your account. Please double-check the order number — you can find it in your Dashboard → Orders.`,
+      });
+    }
+
+    trackQuery('order_lookup', normalised);
+    analytics.resolvedByBot++;
+
+    return res.json({
+      found: true,
+      order: {
+        orderNumber: order.orderNumber,
+        status: order.status,
+        amount: order.amount,
+        productName: order.productSnapshot?.name || 'Subscription',
+        platform: order.productSnapshot?.platform || '',
+        duration: order.productSnapshot?.duration || '',
+        createdAt: order.createdAt,
+        isRefunded: order.isRefunded,
+        refundStatus: order.refundStatus,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ── Main Chat ─────────────────────────────────────────────────────────────────
 exports.chat = async (req, res) => {
   const { messages, userId } = req.body;
   if (!messages || !Array.isArray(messages)) {
@@ -49,7 +93,7 @@ exports.chat = async (req, res) => {
     if (userId) {
       const user = await User.findById(userId).select('name email wallet activeSubscriptions');
       if (user) {
-        userContext = `User: ${user.name} | Email: ${user.email} | Wallet: $${user.wallet?.toFixed(2) || '0.00'}`;
+        userContext = `User: ${user.name} | Email: ${user.email} | Wallet: ${user.wallet?.toFixed(2) || '0.00'}`;
         const activeSubs = (user.activeSubscriptions || [])
           .filter((s) => s.status === 'active')
           .map((s) => `${s.productName} (expires ${new Date(s.expiryDate).toLocaleDateString()})`)
@@ -61,19 +105,19 @@ exports.chat = async (req, res) => {
       const orders = await Order.find({ user: userId })
         .sort({ createdAt: -1 })
         .limit(3)
-        .select('orderNumber status amount productSnapshot createdAt credentials');
+        .select('orderNumber status amount productSnapshot createdAt');
 
       if (orders.length) {
         orderContext = orders
           .map(
             (o) =>
-              `Order ${o.orderNumber}: ${o.productSnapshot?.name || 'Unknown'} | Status: ${o.status} | $${o.amount} | Date: ${new Date(o.createdAt).toLocaleDateString()}`
+              `Order ${o.orderNumber}: ${o.productSnapshot?.name || 'Unknown'} | Status: ${o.status} | ${o.amount} | Date: ${new Date(o.createdAt).toLocaleDateString()}`
           )
           .join('\n');
       }
     }
   } catch (_) {
-    // non-fatal — proceed without context
+    // non-fatal
   }
 
   const systemPrompt = `You are OTHub's friendly AI support agent. OTHub is a premium OTT subscription marketplace.
@@ -98,10 +142,8 @@ RESPONSE RULES:
 - Never share credentials in chat — direct to Dashboard
 - If unsure, say "Let me connect you with our team" and offer escalation`;
 
-  // Check if OpenAI key is configured
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    // Fallback canned responses when no API key
     const fallback = getFallbackResponse(intent, lastUserMsg);
     if (intent === 'escalation') analytics.escalations++;
     else analytics.resolvedByBot++;
@@ -136,7 +178,6 @@ RESPONSE RULES:
 
     res.json({ reply, intent });
   } catch (err) {
-    // Graceful fallback on API failure
     const fallback = getFallbackResponse(intent, lastUserMsg);
     res.json({ reply: fallback, intent, fallback: true });
   }
@@ -160,9 +201,9 @@ exports.getAnalytics = async (req, res) => {
   });
 };
 
-function getFallbackResponse(intent, msg) {
+function getFallbackResponse(intent) {
   const responses = {
-    order: `🔍 To check your order status, head to your **Dashboard → Order History**. You'll see real-time status updates there.\n\nNeed more help? [Open Support Ticket]`,
+    order: `📦 Sure! Please share your **Order ID** (e.g. ORD-1234567-ABCDE) and I'll pull up the status right away.`,
     wallet: `💳 To top up your wallet:\n1. Go to **Dashboard**\n2. Click **Fund Wallet**\n3. Choose your amount\n4. Complete payment\n\nYour balance updates instantly! [Go to Dashboard]`,
     subscription: `📺 Your active subscriptions are in **Dashboard → My Subscriptions**. Credentials are delivered via email within 24 hours.\n\nHaving issues? [Open Support Ticket]`,
     refund: `💰 Refund requests are processed within 48 hours. Please open a support ticket with your order number and we'll sort it out.\n\n[Open Support Ticket]`,
