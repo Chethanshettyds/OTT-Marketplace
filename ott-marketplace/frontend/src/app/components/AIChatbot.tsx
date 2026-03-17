@@ -30,12 +30,12 @@ interface Message {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const TOPIC_MENU = [
-  { label: 'Order Status',    icon: '📦', action: 'I want to check my order status' },
-  { label: 'Wallet & Top-up', icon: '💳', action: 'How do I top up my wallet?' },
-  { label: 'Subscriptions',   icon: '📺', action: 'Show me my active subscriptions' },
-  { label: 'Account Issues',  icon: '🔐', action: 'I have an account issue' },
-  { label: 'Get a Refund',    icon: '💰', action: 'I need a refund for my order' },
-  { label: 'Talk to Human',   icon: '🧑‍💼', action: 'I want to talk to a human agent' },
+  { label: 'Order Status',    icon: 'pi pi-box',          action: 'I want to check my order status' },
+  { label: 'Wallet & Top-up', icon: 'pi pi-wallet',       action: 'How do I top up my wallet?' },
+  { label: 'Subscriptions',   icon: 'pi pi-play-circle',  action: 'Show me my active subscriptions' },
+  { label: 'Account Issues',  icon: 'pi pi-user',         action: 'I have an account issue' },
+  { label: 'Get a Refund',    icon: 'pi pi-refresh',      action: 'I need a refund for my order' },
+  { label: 'Talk to Human',   icon: 'pi pi-headphones',   action: 'I want to talk to a human agent' },
 ];
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string; icon: string }> = {
@@ -187,19 +187,20 @@ function TopicMenu({ buttons, onSelect, disabled }: {
           key={btn.label}
           disabled={disabled}
           onClick={() => onSelect(btn.action, btn.label)}
-          className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-left text-xs font-medium
-                     border border-purple-500/25 text-white/80 transition-all
+          className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-xs font-semibold
+                     border border-purple-500/25 text-white/80 transition-all group
                      hover:border-purple-400/60 hover:bg-purple-500/15 hover:text-white
                      active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ background: 'rgba(161,0,255,0.07)' }}
         >
-          <span className="text-base leading-none flex-shrink-0">{btn.icon}</span>
+          <i className={`${btn.icon} text-[15px] text-purple-400 group-hover:text-purple-300 transition-colors flex-shrink-0`} />
           <span className="leading-tight">{btn.label}</span>
         </button>
       ))}
     </div>
   );
 }
+
 
 // ── NewChatBanner — shown after a conversation completes ──────────────────────
 function NewChatBanner({ onNewChat }: { onNewChat: () => void }) {
