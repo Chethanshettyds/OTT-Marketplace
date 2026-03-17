@@ -26,7 +26,7 @@ exports.register = async (req, res) => {
         ? 'admin'
         : 'user';
 
-    const user = await User.create({ name, email, password, role });
+    const user = await User.create({ name, email, password, role, welcomeEmailSent: true });
     const token = generateToken(user._id);
     res.status(201).json({ token, user });
 
@@ -113,6 +113,7 @@ exports.googleAuth = async (req, res) => {
         googleId,
         avatar: picture,
         role,
+        welcomeEmailSent: true,
         // Random password so the schema doesn't reject (won't be used)
         password: require('crypto').randomBytes(32).toString('hex'),
       });
@@ -125,7 +126,8 @@ exports.googleAuth = async (req, res) => {
           email: user.email,
           shopUrl: `${process.env.CLIENT_URL || 'http://localhost:5173'}/shop`,
         }),
-      }).catch((err) => console.error('Welcome email failed:', err.message));
+      }).then(() => console.log(`📧 Welcome email sent to ${user.email}`))
+        .catch((err) => console.error('Welcome email failed:', err.message));
     } else {
       // Existing user — patch googleId/avatar if missing
       if (!user.googleId) user.googleId = googleId;
@@ -134,6 +136,21 @@ exports.googleAuth = async (req, res) => {
         user.role = 'admin';
       }
       user.lastLogin = new Date();
+
+      // Send welcome email if they never received one (e.g. created via password then linked Google)
+      if (!user.welcomeEmailSent) {
+        user.welcomeEmailSent = true;
+        sendMail({
+          to: user.email,
+          ...welcomeMail({
+            userName: user.name,
+            email: user.email,
+            shopUrl: `${process.env.CLIENT_URL || 'http://localhost:5173'}/shop`,
+          }),
+        }).then(() => console.log(`📧 Welcome email sent to ${user.email}`))
+          .catch((err) => console.error('Welcome email failed:', err.message));
+      }
+
       await user.save({ validateBeforeSave: false });
     }
 

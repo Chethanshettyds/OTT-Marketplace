@@ -41,6 +41,7 @@ const userSchema = new mongoose.Schema(
     wallet: { type: Number, default: 0, min: 0 },
     avatar: { type: String, default: '' },
     googleId: { type: String, default: '' },
+    welcomeEmailSent: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
     lastLogin: { type: Date },
     paymentMethods: [paymentMethodSchema],

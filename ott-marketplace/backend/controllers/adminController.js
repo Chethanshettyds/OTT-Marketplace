@@ -143,7 +143,7 @@ exports.deleteProduct = async (req, res) => {
 exports.listUsers = async (req, res) => {
   try {
     const users = await User.find({ role: 'user' })
-      .select('_id name email wallet isActive createdAt lastLogin')
+      .select('_id name email wallet isActive createdAt lastLogin googleId')
       .sort({ createdAt: -1 })
       .lean();
 
