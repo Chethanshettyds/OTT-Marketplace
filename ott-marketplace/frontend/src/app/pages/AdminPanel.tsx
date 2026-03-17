@@ -324,8 +324,8 @@ export default function AdminPanel() {
   ] : [];
 
   return (
-    <div className="min-h-screen gradient-bg pt-20 pb-10">
-      <div className="max-w-7xl mx-auto px-4">
+    <div className="min-h-screen gradient-bg pt-20 pb-10 admin-page-wrapper">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 w-full">
         <motion.div className="flex items-center gap-3 mb-8" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
             <i className="pi pi-cog text-white" />
@@ -337,7 +337,7 @@ export default function AdminPanel() {
         </motion.div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 glass rounded-xl p-1 w-fit overflow-x-auto">
+        <div className="admin-tabs flex gap-1 mb-6 glass rounded-xl p-1 w-full overflow-x-auto">
           {TABS.map((tab) => (
             <button key={tab} onClick={() => setActiveTab(tab)}
               className={`relative px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200 ${activeTab === tab ? 'bg-indigo-500 text-white' : 'text-white/50 hover:text-white'}`}>
@@ -356,7 +356,7 @@ export default function AdminPanel() {
           {/* ── Dashboard ── */}
           {activeTab === 'Dashboard' && (
             <div className="space-y-6">
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="admin-stat-grid grid grid-cols-2 lg:grid-cols-5 gap-4">
                 {statCards.map((s, i) => (
                   <motion.div key={s.label} className="glass rounded-2xl p-5 border border-white/10"
                     initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}>
@@ -417,7 +417,7 @@ export default function AdminPanel() {
               <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                 <div>
                   <h3 className="text-white font-semibold text-lg">Products</h3>
-                  <div className="flex items-center gap-3 mt-1 text-xs">
+                  <div className="flex items-center gap-2 mt-1 text-xs flex-wrap">
                     <span className="text-green-400">🟢 In Stock: {products.filter(p => p.stock > 5).length}</span>
                     <span className="text-orange-400">🟡 Low Stock: {products.filter(p => p.stock > 0 && p.stock <= 5).length}</span>
                     <span className="text-red-400">🔴 Out of Stock: {products.filter(p => p.stock === 0).length}</span>
