@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import api from '../utils/api';
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 type ConversationState = 'idle' | 'awaiting_order_id';
 
 interface OrderResult {
@@ -23,31 +23,33 @@ interface Message {
   content: string;
   ts: Date;
   intent?: string;
-  orderCard?: OrderResult | null; // rich order card attached to this message
+  orderCard?: OrderResult | null;
+  // special: renders topic-picker buttons instead of text
+  menuButtons?: Array<{ label: string; icon: string; action: string }>;
 }
 
-interface QuickReply { label: string; text: string; icon: string }
-
-// ── Constants ────────────────────────────────────────────────────────────────
-const QUICK_REPLIES: QuickReply[] = [
-  { label: 'Order Status', text: 'I want to check my order status', icon: '📦' },
-  { label: 'Top Up Wallet', text: 'How do I top up my wallet?', icon: '💳' },
-  { label: 'Subscriptions', text: 'Show me my active subscriptions', icon: '📺' },
-  { label: 'Get Refund', text: 'I need a refund for my order', icon: '💰' },
+// ── Constants ─────────────────────────────────────────────────────────────────
+const TOPIC_MENU = [
+  { label: 'Order Status',    icon: '📦', action: 'I want to check my order status' },
+  { label: 'Wallet & Top-up', icon: '💳', action: 'How do I top up my wallet?' },
+  { label: 'Subscriptions',   icon: '📺', action: 'Show me my active subscriptions' },
+  { label: 'Account Issues',  icon: '🔐', action: 'I have an account issue' },
+  { label: 'Get a Refund',    icon: '💰', action: 'I need a refund for my order' },
+  { label: 'Talk to Human',   icon: '🧑‍💼', action: 'I want to talk to a human agent' },
 ];
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string; icon: string }> = {
   pending:    { label: 'Pending',    color: 'text-yellow-300', bg: 'bg-yellow-500/15 border-yellow-500/30', icon: '⏳' },
-  processing: { label: 'Processing', color: 'text-blue-300',   bg: 'bg-blue-500/15 border-blue-500/30',   icon: '⚙️' },
+  processing: { label: 'Processing', color: 'text-blue-300',   bg: 'bg-blue-500/15 border-blue-500/30',    icon: '⚙️' },
   delivered:  { label: 'Delivered',  color: 'text-green-300',  bg: 'bg-green-500/15 border-green-500/30',  icon: '✅' },
   refunded:   { label: 'Refunded',   color: 'text-purple-300', bg: 'bg-purple-500/15 border-purple-500/30',icon: '↩️' },
-  cancelled:  { label: 'Cancelled',  color: 'text-red-300',    bg: 'bg-red-500/15 border-red-500/30',    icon: '❌' },
+  cancelled:  { label: 'Cancelled',  color: 'text-red-300',    bg: 'bg-red-500/15 border-red-500/30',      icon: '❌' },
 };
 
 const STORAGE_KEY = 'othub-chat-history';
 const SESSION_TTL = 24 * 60 * 60 * 1000;
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).slice(2);
 
 function loadHistory(): Message[] {
@@ -60,22 +62,20 @@ function loadHistory(): Message[] {
   } catch { return []; }
 }
 
-function saveHistory(messages: Message[]) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ messages, savedAt: Date.now() })); } catch {}
+function saveHistory(msgs: Message[]) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ messages: msgs, savedAt: Date.now() })); } catch {}
 }
 
-// Detect if a string looks like an order number (ORD-... pattern or pure digits)
 function looksLikeOrderId(text: string): boolean {
-  return /^ORD-\d+-[A-Z0-9]+$/i.test(text.trim()) || /^\d{8,}$/i.test(text.trim());
+  return /^ORD-\d+-[A-Z0-9]+$/i.test(text.trim());
 }
 
-// Extract order number from a message (handles "ORD-123-ABC" anywhere in text)
 function extractOrderNumber(text: string): string | null {
-  const match = text.match(/ORD-\d+-[A-Z0-9]+/i);
-  return match ? match[0].toUpperCase() : null;
+  const m = text.match(/ORD-\d+-[A-Z0-9]+/i);
+  return m ? m[0].toUpperCase() : null;
 }
 
-// ── renderContent: parses **bold** and [Button] syntax ───────────────────────
+// ── renderContent ─────────────────────────────────────────────────────────────
 function renderContent(content: string) {
   return content.split('\n').map((line, li, arr) => {
     const parts = line.split(/(\[[^\]]+\])/g);
@@ -89,8 +89,9 @@ function renderContent(content: string) {
               <a key={pi} href={href}
                 className="inline-flex items-center gap-1 mt-1 mr-1 px-3 py-1.5 rounded-full text-xs font-semibold
                            bg-purple-600/25 border border-purple-500/40 text-purple-200
-                           hover:bg-purple-600/45 hover:border-purple-400 transition-all cursor-pointer no-underline"
-              >{label}</a>
+                           hover:bg-purple-600/45 hover:border-purple-400 transition-all cursor-pointer no-underline">
+                {label}
+              </a>
             );
           }
           return part.split(/(\*\*[^*]+\*\*)/g).map((bp, bpi) =>
@@ -107,7 +108,7 @@ function renderContent(content: string) {
 
 function getActionHref(label: string): string {
   const l = label.toLowerCase();
-  if (l.includes('order') || l.includes('detail') || l.includes('view')) return '/dashboard';
+  if (l.includes('order') || l.includes('detail') || l.includes('view') || l.includes('all')) return '/dashboard';
   if (l.includes('dashboard') || l.includes('subscription')) return '/dashboard';
   if (l.includes('shop') || l.includes('browse')) return '/shop';
   if (l.includes('ticket') || l.includes('support') || l.includes('report') || l.includes('connect')) return '/tickets';
@@ -115,32 +116,25 @@ function getActionHref(label: string): string {
   return '#';
 }
 
-// ── OrderCard component ───────────────────────────────────────────────────────
+// ── OrderCard ─────────────────────────────────────────────────────────────────
 function OrderCard({ order, onNavigate }: { order: OrderResult; onNavigate: () => void }) {
   const meta = STATUS_META[order.status] || STATUS_META.pending;
-  const date = new Date(order.createdAt).toLocaleDateString('en-IN', {
-    day: 'numeric', month: 'short', year: 'numeric',
-  });
+  const date = new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
   return (
-    <div className="mt-2 rounded-xl border border-white/10 overflow-hidden"
-      style={{ background: 'linear-gradient(135deg, rgba(161,0,255,0.08) 0%, rgba(10,10,15,0.9) 100%)' }}>
-      {/* Card header */}
+    <div className="mt-2 rounded-xl border border-white/10 overflow-hidden w-full"
+      style={{ background: 'linear-gradient(135deg, rgba(161,0,255,0.08) 0%, rgba(10,10,15,0.95) 100%)' }}>
       <div className="flex items-center justify-between px-3 py-2 border-b border-white/8"
-        style={{ background: 'rgba(161,0,255,0.1)' }}>
+        style={{ background: 'rgba(161,0,255,0.12)' }}>
         <div className="flex items-center gap-2">
-          <span className="text-base">📦</span>
-          <span className="text-xs font-mono text-purple-300 font-semibold tracking-wide">
-            {order.orderNumber}
-          </span>
+          <span className="text-sm">📦</span>
+          <span className="text-xs font-mono text-purple-300 font-semibold tracking-wide">{order.orderNumber}</span>
         </div>
         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${meta.bg} ${meta.color}`}>
           {meta.icon} {meta.label}
         </span>
       </div>
-
-      {/* Card body */}
-      <div className="px-3 py-2.5 space-y-1.5">
+      <div className="px-3 py-2.5 space-y-2">
         <div className="flex items-start justify-between gap-2">
           <div>
             <p className="text-sm font-semibold text-white leading-tight">{order.productName}</p>
@@ -150,7 +144,6 @@ function OrderCard({ order, onNavigate }: { order: OrderResult; onNavigate: () =
           </div>
           <p className="text-sm font-bold text-purple-300 flex-shrink-0">₹{order.amount}</p>
         </div>
-
         <div className="flex items-center gap-1.5 text-[11px] text-white/35">
           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -158,31 +151,76 @@ function OrderCard({ order, onNavigate }: { order: OrderResult; onNavigate: () =
           </svg>
           Ordered on {date}
         </div>
-
-        {/* Status message */}
-        <div className={`text-[11px] px-2 py-1 rounded-lg border ${meta.bg} ${meta.color} leading-snug`}>
-          {order.status === 'pending' && '⏳ Your order is queued and will be processed shortly.'}
-          {order.status === 'processing' && '⚙️ We\'re preparing your subscription credentials.'}
-          {order.status === 'delivered' && '✅ Delivered! Check your email or Dashboard for credentials.'}
-          {order.status === 'refunded' && '↩️ This order has been refunded to your wallet.'}
-          {order.status === 'cancelled' && '❌ This order was cancelled.'}
+        <div className={`text-[11px] px-2.5 py-1.5 rounded-lg border ${meta.bg} ${meta.color} leading-snug`}>
+          {order.status === 'pending'    && '⏳ Your order is queued and will be processed shortly.'}
+          {order.status === 'processing' && "⚙️ We're preparing your subscription credentials."}
+          {order.status === 'delivered'  && '✅ Delivered! Check your email or Dashboard for credentials.'}
+          {order.status === 'refunded'   && '↩️ This order has been refunded to your wallet.'}
+          {order.status === 'cancelled'  && '❌ This order was cancelled.'}
         </div>
       </div>
-
-      {/* CTA */}
       <div className="px-3 pb-3">
-        <button
-          onClick={onNavigate}
+        <button onClick={onNavigate}
           className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold
                      bg-gradient-to-r from-[#A100FF] to-[#6600CC] text-white
-                     hover:shadow-[0_0_16px_rgba(161,0,255,0.45)] transition-all active:scale-[0.98]"
-        >
+                     hover:shadow-[0_0_16px_rgba(161,0,255,0.45)] transition-all active:scale-[0.98]">
           View Full Order Details
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
           </svg>
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── TopicMenu — rendered inside a bot bubble ──────────────────────────────────
+function TopicMenu({ buttons, onSelect, disabled }: {
+  buttons: Array<{ label: string; icon: string; action: string }>;
+  onSelect: (action: string, label: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="mt-2 grid grid-cols-2 gap-2">
+      {buttons.map((btn) => (
+        <button
+          key={btn.label}
+          disabled={disabled}
+          onClick={() => onSelect(btn.action, btn.label)}
+          className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-left text-xs font-medium
+                     border border-purple-500/25 text-white/80 transition-all
+                     hover:border-purple-400/60 hover:bg-purple-500/15 hover:text-white
+                     active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ background: 'rgba(161,0,255,0.07)' }}
+        >
+          <span className="text-base leading-none flex-shrink-0">{btn.icon}</span>
+          <span className="leading-tight">{btn.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── NewChatBanner — shown after a conversation completes ──────────────────────
+function NewChatBanner({ onNewChat }: { onNewChat: () => void }) {
+  return (
+    <div className="flex flex-col items-center gap-2 py-3 px-4">
+      <div className="w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+      <p className="text-[11px] text-white/30">Conversation ended</p>
+      <button
+        onClick={onNewChat}
+        className="flex items-center gap-2 px-5 py-2 rounded-full text-xs font-semibold
+                   border border-purple-500/40 text-purple-300
+                   hover:bg-purple-500/15 hover:border-purple-400/70 hover:text-white
+                   transition-all active:scale-95"
+        style={{ background: 'rgba(161,0,255,0.08)' }}
+      >
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M12 4v16m8-8H4" />
+        </svg>
+        Start New Chat
+      </button>
     </div>
   );
 }
@@ -198,8 +236,9 @@ export default function AIChatbot() {
   const [copied, setCopied] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
   const [pulse, setPulse] = useState(true);
-  // Conversation state machine
   const [convState, setConvState] = useState<ConversationState>('idle');
+  // true once a full exchange has completed — shows "New Chat" banner
+  const [convDone, setConvDone] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -208,17 +247,22 @@ export default function AIChatbot() {
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
   useEffect(() => { if (messages.length) saveHistory(messages); }, [messages]);
 
-  // Welcome message on first open
+  // Build welcome message with topic menu
+  const buildWelcome = useCallback((): Message => ({
+    id: uid(),
+    role: 'bot',
+    ts: new Date(),
+    content: `👋 Hey${user?.name ? ` ${user.name.split(' ')[0]}` : ''}! I'm OTHub's AI assistant.\n\nWhat can I help you with today?`,
+    menuButtons: TOPIC_MENU,
+  }), [user]);
+
   useEffect(() => {
     if (open && messages.length === 0) {
-      setMessages([{
-        id: uid(), role: 'bot', ts: new Date(),
-        content: `👋 Hey${user?.name ? ` ${user.name.split(' ')[0]}` : ''}! I'm OTHub's AI assistant.\n\nI can help with orders, wallet top-ups, subscriptions, and more. What's on your mind?`,
-      }]);
+      setMessages([buildWelcome()]);
     }
   }, [open]);
 
-  // Voice input
+  // Voice
   const startVoice = useCallback(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) return;
@@ -230,11 +274,21 @@ export default function AIChatbot() {
     recognitionRef.current = rec;
     rec.start(); setListening(true);
   }, []);
-
   const stopVoice = useCallback(() => { recognitionRef.current?.stop(); setListening(false); }, []);
 
-  // ── Order ID lookup flow ──────────────────────────────────────────────────
-  const handleOrderLookup = useCallback(async (orderNumber: string, userMsgId: string) => {
+  // New chat — wipe everything and show fresh welcome
+  const startNewChat = useCallback(() => {
+    localStorage.removeItem(STORAGE_KEY);
+    setConvDone(false);
+    setConvState('idle');
+    setInput('');
+    const welcome = buildWelcome();
+    setMessages([welcome]);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, [buildWelcome]);
+
+  // ── Order lookup ──────────────────────────────────────────────────────────
+  const handleOrderLookup = useCallback(async (orderNumber: string) => {
     setLoading(true);
     try {
       const { data } = await api.post('/chatbot/order-status', { orderNumber });
@@ -247,80 +301,76 @@ export default function AIChatbot() {
       } else {
         const o: OrderResult = data.order;
         const meta = STATUS_META[o.status] || STATUS_META.pending;
-        setMessages((prev) => [...prev, {
-          id: uid(), role: 'bot', ts: new Date(),
-          content: `🔍 Found your order! Here's the status:`,
-          orderCard: o,
-          intent: 'order_lookup',
-        }, {
-          id: uid(), role: 'bot', ts: new Date(),
-          content: `${meta.icon} Status is **${meta.label}**. ${
-            o.status === 'delivered'
-              ? 'Your credentials have been sent to your email. Check your Dashboard for details.'
-              : o.status === 'pending'
-              ? 'We\'ll process it shortly — usually within 1–24 hours.'
-              : o.status === 'processing'
-              ? 'Almost there! We\'re preparing your subscription.'
-              : o.status === 'refunded'
-              ? 'The amount has been credited back to your wallet.'
-              : 'If you need help, open a support ticket.'
-          }\n\nAnything else I can help with?`,
-        }]);
+        setMessages((prev) => [...prev,
+          { id: uid(), role: 'bot', ts: new Date(), content: `🔍 Found your order! Here's the latest status:`, orderCard: o, intent: 'order_lookup' },
+          {
+            id: uid(), role: 'bot', ts: new Date(),
+            content: `${meta.icon} Status is **${meta.label}**. ${
+              o.status === 'delivered'  ? 'Your credentials have been sent to your email. Check your Dashboard for details.' :
+              o.status === 'pending'    ? "We'll process it shortly — usually within 1–24 hours." :
+              o.status === 'processing' ? "Almost there! We're preparing your subscription." :
+              o.status === 'refunded'   ? 'The amount has been credited back to your wallet.' :
+              'If you need help, open a support ticket.'
+            }\n\nIs there anything else I can help you with?`,
+          },
+        ]);
       }
       setConvState('idle');
+      setConvDone(true);
     } catch {
       setMessages((prev) => [...prev, {
         id: uid(), role: 'bot', ts: new Date(),
         content: `⚠️ Couldn't fetch that order right now. Please try again or [Open Support Ticket].`,
       }]);
       setConvState('idle');
+      setConvDone(true);
     } finally {
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, []);
 
-  // ── Main send handler ─────────────────────────────────────────────────────
+  // ── Main send ─────────────────────────────────────────────────────────────
   const sendMessage = useCallback(async (text?: string) => {
     const content = (text ?? input).trim();
     if (!content || loading) return;
 
+    setConvDone(false);
     const userMsg: Message = { id: uid(), role: 'user', content, ts: new Date() };
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
 
-    // ── State: waiting for order ID ──
+    // Awaiting order ID
     if (convState === 'awaiting_order_id') {
       const extracted = extractOrderNumber(content) || (looksLikeOrderId(content) ? content.trim().toUpperCase() : null);
       if (extracted) {
-        await handleOrderLookup(extracted, userMsg.id);
+        await handleOrderLookup(extracted);
       } else {
         setLoading(true);
         await new Promise((r) => setTimeout(r, 400));
         setMessages((prev) => [...prev, {
           id: uid(), role: 'bot', ts: new Date(),
-          content: `🤔 That doesn't look like a valid order ID. Order IDs look like **ORD-1234567-ABCDE**.\n\nYou can find yours in **Dashboard → Orders**. Please try again:`,
+          content: `🤔 That doesn't look like a valid Order ID. They look like **ORD-1234567-ABCDE**.\n\nYou can find yours in **Dashboard → Orders**. Please try again:`,
         }]);
         setLoading(false);
       }
       return;
     }
 
-    // ── Check if user typed an order number directly ──
+    // Direct order number typed
     const directOrder = extractOrderNumber(content);
     if (directOrder) {
-      await handleOrderLookup(directOrder, userMsg.id);
+      await handleOrderLookup(directOrder);
       return;
     }
 
-    // ── Detect order intent → ask for order ID ──
-    const isOrderIntent = /order|status|track|where.*order|check.*order|my order/i.test(content);
-    if (isOrderIntent) {
+    // Order intent → ask for ID
+    if (/order|status|track|where.*order|check.*order|my order/i.test(content)) {
       setLoading(true);
       await new Promise((r) => setTimeout(r, 500));
       setMessages((prev) => [...prev, {
         id: uid(), role: 'bot', ts: new Date(),
-        content: `📦 Sure! Please type your **Order ID** to check the status.\n\nIt looks like **ORD-1234567-ABCDE** — you can find it in your Dashboard → Orders.`,
+        content: `📦 Sure! Please type your **Order ID** to check the status.\n\nIt looks like **ORD-1234567-ABCDE** — you can find it in **Dashboard → Orders**.`,
       }]);
       setConvState('awaiting_order_id');
       setLoading(false);
@@ -328,7 +378,7 @@ export default function AIChatbot() {
       return;
     }
 
-    // ── Regular GPT / fallback flow ──
+    // GPT / fallback
     setLoading(true);
     const apiMessages = [...messages, userMsg].slice(-10).map((m) => ({
       role: m.role === 'bot' ? 'assistant' : 'user',
@@ -338,11 +388,13 @@ export default function AIChatbot() {
     try {
       const { data } = await api.post('/chatbot/chat', { messages: apiMessages, userId: user?._id });
       setMessages((prev) => [...prev, { id: uid(), role: 'bot', ts: new Date(), content: data.reply, intent: data.intent }]);
+      setConvDone(true);
     } catch {
       setMessages((prev) => [...prev, {
         id: uid(), role: 'bot', ts: new Date(),
         content: `⚠️ I'm having a moment. Please try again or [Open Support Ticket].`,
       }]);
+      setConvDone(true);
     } finally {
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 100);
@@ -357,16 +409,12 @@ export default function AIChatbot() {
     navigator.clipboard.writeText(text).then(() => { setCopied(id); setTimeout(() => setCopied(null), 2000); });
   };
 
-  const clearHistory = () => {
-    setMessages([]); setConvState('idle'); localStorage.removeItem(STORAGE_KEY);
-  };
-
   const hasSpeech = typeof window !== 'undefined' &&
     ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
   const inputPlaceholder = convState === 'awaiting_order_id'
-    ? 'Type your Order ID (e.g. ORD-1234567-ABCDE)...'
-    : 'Ask me anything...';
+    ? 'Paste your Order ID here (e.g. ORD-1234567-ABCDE)...'
+    : 'Type a message...';
 
   return (
     <>
@@ -400,7 +448,7 @@ export default function AIChatbot() {
                     bottom-24 right-6
                     w-[calc(100vw-3rem)] max-w-[400px] sm:w-[400px]
                     max-sm:bottom-0 max-sm:right-0 max-sm:w-full max-sm:max-w-full`}
-        style={{ height: 'min(620px, calc(100dvh - 7rem))' }}
+        style={{ height: 'min(640px, calc(100dvh - 7rem))' }}
       >
         <div
           className="flex flex-col h-full rounded-2xl max-sm:rounded-b-none overflow-hidden border border-white/10"
@@ -409,9 +457,9 @@ export default function AIChatbot() {
             boxShadow: '0 0 40px rgba(161,0,255,0.2), 0 25px 50px rgba(0,0,0,0.8)',
           }}
         >
-          {/* Header */}
+          {/* ── Header ── */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0"
-            style={{ background: 'linear-gradient(90deg, rgba(161,0,255,0.15), rgba(102,0,204,0.1))' }}>
+            style={{ background: 'linear-gradient(90deg, rgba(161,0,255,0.15), rgba(102,0,204,0.08))' }}>
             <div className="flex items-center gap-3">
               <div className="relative">
                 <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#A100FF] to-[#6600CC] flex items-center justify-center text-lg">🤖</div>
@@ -422,25 +470,24 @@ export default function AIChatbot() {
                 <p className="text-xs text-green-400">Online · Instant replies</p>
               </div>
             </div>
-            <div className="flex items-center gap-1">
-              <button onClick={clearHistory} title="Clear chat"
-                className="p-1.5 rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
-              <button onClick={() => setOpen(false)}
-                className="p-1.5 rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            </div>
+            {/* New Chat button in header */}
+            <button
+              onClick={startNewChat}
+              title="Start new chat"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                         text-white/50 hover:text-white border border-white/8 hover:border-purple-500/40
+                         hover:bg-purple-500/10 transition-all"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              New Chat
+            </button>
           </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(161,0,255,0.3) transparent' }}>
+          {/* ── Messages ── */}
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3"
+            style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(161,0,255,0.3) transparent' }}>
             {messages.map((msg) => (
               <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                 {/* Avatar */}
@@ -452,19 +499,28 @@ export default function AIChatbot() {
                   </div>
                 )}
 
-                {/* Bubble + optional order card */}
-                <div className={`group max-w-[82%] flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                {/* Bubble */}
+                <div className={`group max-w-[85%] flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                   <div
-                    className={`px-3 py-2 rounded-2xl text-sm leading-relaxed
+                    className={`px-3 py-2.5 rounded-2xl text-sm leading-relaxed
                       ${msg.role === 'user'
                         ? 'bg-gradient-to-br from-[#A100FF] to-[#6600CC] text-white rounded-tr-sm'
                         : 'text-slate-200 rounded-tl-sm border border-white/10'}`}
                     style={msg.role === 'bot' ? { background: 'rgba(255,255,255,0.06)' } : {}}
                   >
                     {renderContent(msg.content)}
+
+                    {/* Topic menu buttons — rendered inside the bubble */}
+                    {msg.menuButtons && (
+                      <TopicMenu
+                        buttons={msg.menuButtons}
+                        onSelect={(action) => sendMessage(action)}
+                        disabled={loading}
+                      />
+                    )}
                   </div>
 
-                  {/* Rich order card */}
+                  {/* Order card */}
                   {msg.orderCard && (
                     <div className="w-full mt-1">
                       <OrderCard order={msg.orderCard} onNavigate={() => { navigate('/dashboard'); setOpen(false); }} />
@@ -496,40 +552,31 @@ export default function AIChatbot() {
                 </div>
               </div>
             )}
+
+            {/* New Chat banner — shown after conversation completes */}
+            {convDone && !loading && <NewChatBanner onNewChat={startNewChat} />}
+
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Quick Replies */}
-          {messages.length <= 1 && !loading && convState === 'idle' && (
-            <div className="px-4 pb-2 flex gap-2 flex-wrap flex-shrink-0">
-              {QUICK_REPLIES.map((qr) => (
-                <button key={qr.label} onClick={() => sendMessage(qr.text)}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium
-                             border border-purple-500/30 text-purple-300 bg-purple-500/10
-                             hover:bg-purple-500/20 hover:border-purple-400/50 transition-all">
-                  <span>{qr.icon}</span>{qr.label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Order ID hint bar — shown when awaiting order ID */}
+          {/* Order ID hint bar */}
           {convState === 'awaiting_order_id' && !loading && (
             <div className="mx-3 mb-2 px-3 py-2 rounded-xl border border-purple-500/25 flex items-center gap-2 flex-shrink-0"
               style={{ background: 'rgba(161,0,255,0.08)' }}>
-              <span className="text-base">🔍</span>
+              <span className="text-sm">🔍</span>
               <p className="text-xs text-purple-300/80">
-                Waiting for your Order ID — format: <span className="font-mono font-semibold text-purple-200">ORD-XXXXXXX-XXXXX</span>
+                Waiting for Order ID — format: <span className="font-mono font-semibold text-purple-200">ORD-XXXXXXX-XXXXX</span>
               </p>
             </div>
           )}
 
-          {/* Input */}
+          {/* ── Input ── */}
           <div className="px-3 pb-3 pt-2 border-t border-white/10 flex-shrink-0">
             <div className={`flex items-end gap-2 border rounded-xl px-3 py-2 transition-all
                             ${convState === 'awaiting_order_id'
-                              ? 'bg-purple-500/8 border-purple-500/40 shadow-[0_0_0_1px_rgba(161,0,255,0.15)]'
-                              : 'bg-white/5 border-white/10 focus-within:border-purple-500/50 focus-within:shadow-[0_0_0_1px_rgba(161,0,255,0.2)]'}`}>
+                              ? 'border-purple-500/50 shadow-[0_0_0_1px_rgba(161,0,255,0.2)]'
+                              : 'border-white/10 focus-within:border-purple-500/50 focus-within:shadow-[0_0_0_1px_rgba(161,0,255,0.2)]'}`}
+              style={{ background: convState === 'awaiting_order_id' ? 'rgba(161,0,255,0.06)' : 'rgba(255,255,255,0.04)' }}>
               <textarea
                 ref={inputRef}
                 value={input}
