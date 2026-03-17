@@ -18,6 +18,7 @@ interface AuthState {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
+  googleLogin: (credential: string) => Promise<void>;
   logout: () => void;
   updateUser: (user: Partial<User>) => void;
   refreshUser: () => Promise<void>;
@@ -51,6 +52,18 @@ export const useAuthStore = create<AuthState>()(
         } catch (err: any) {
           set({ isLoading: false });
           throw new Error(err.response?.data?.error || 'Registration failed');
+        }
+      },
+
+      googleLogin: async (credential: string) => {
+        set({ isLoading: true });
+        try {
+          const { data } = await api.post('/auth/google', { credential });
+          api.defaults.headers.common['Authorization'] = `Bearer ${data.token}`;
+          set({ user: data.user, token: data.token, isLoading: false });
+        } catch (err: any) {
+          set({ isLoading: false });
+          throw new Error(err.response?.data?.error || 'Google authentication failed');
         }
       },
 

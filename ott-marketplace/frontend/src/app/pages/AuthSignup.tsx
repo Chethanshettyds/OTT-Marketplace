@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
+import GoogleAuthButton from '../components/GoogleAuthButton';
 
 interface SignupForm {
   name: string;
@@ -138,6 +139,8 @@ export default function AuthSignup() {
               Sign in
             </Link>
           </p>
+
+          <GoogleAuthButton />
         </div>
       </motion.div>
     </div>

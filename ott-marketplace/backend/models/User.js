@@ -36,10 +36,11 @@ const userSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, required: true, minlength: 6 },
+    password: { type: String, minlength: 6 },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
     wallet: { type: Number, default: 0, min: 0 },
     avatar: { type: String, default: '' },
+    googleId: { type: String, default: '' },
     isActive: { type: Boolean, default: true },
     lastLogin: { type: Date },
     paymentMethods: [paymentMethodSchema],
@@ -49,7 +50,7 @@ const userSchema = new mongoose.Schema(
 );
 
 userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
+  if (!this.isModified('password') || !this.password) return next();
   this.password = await bcrypt.hash(this.password, 12);
   next();
 });

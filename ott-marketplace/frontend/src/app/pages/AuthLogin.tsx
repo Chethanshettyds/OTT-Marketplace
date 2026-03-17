@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { useAuth } from '../hooks/useAuth';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
+import GoogleAuthButton from '../components/GoogleAuthButton';
 
 interface LoginForm {
   email: string;
@@ -119,6 +120,8 @@ export default function AuthLogin() {
               Sign up
             </Link>
           </p>
+
+          <GoogleAuthButton />
         </div>
       </motion.div>
     </div>

@@ -2,7 +2,7 @@ import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 
 export function useAuth() {
-  const { user, token, isLoading, login, register, logout } = useAuthStore();
+  const { user, token, isLoading, login, register, googleLogin, logout } = useAuthStore();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -18,6 +18,7 @@ export function useAuth() {
     isAdmin: user?.role === 'admin',
     login,
     register,
+    googleLogin,
     logout: handleLogout,
   };
 }

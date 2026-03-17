@@ -1,6 +1,9 @@
 const jwt = require('jsonwebtoken');
+const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/User');
 const { sendMail, welcomeMail } = require('../utils/mailer');
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const generateToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
@@ -76,4 +79,70 @@ exports.login = async (req, res) => {
 
 exports.getMe = async (req, res) => {
   res.json({ user: req.user });
+};
+
+exports.googleAuth = async (req, res) => {
+  try {
+    const { credential } = req.body;
+    if (!credential) return res.status(400).json({ error: 'Google credential required' });
+
+    // Verify the Google ID token
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const { sub: googleId, email, name, picture } = payload;
+
+    if (!email) return res.status(400).json({ error: 'No email from Google account' });
+
+    // Upsert user — find by email or googleId
+    let user = await User.findOne({ $or: [{ email }, { googleId }] });
+
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const role =
+      adminEmail && email.toLowerCase().trim() === adminEmail.toLowerCase().trim()
+        ? 'admin'
+        : 'user';
+
+    if (!user) {
+      // New user via Google — no password needed
+      user = await User.create({
+        name,
+        email,
+        googleId,
+        avatar: picture,
+        role,
+        // Random password so the schema doesn't reject (won't be used)
+        password: require('crypto').randomBytes(32).toString('hex'),
+      });
+
+      // Welcome email (non-blocking)
+      sendMail({
+        to: user.email,
+        ...welcomeMail({
+          userName: user.name,
+          email: user.email,
+          shopUrl: `${process.env.CLIENT_URL || 'http://localhost:5173'}/shop`,
+        }),
+      }).catch((err) => console.error('Welcome email failed:', err.message));
+    } else {
+      // Existing user — patch googleId/avatar if missing
+      if (!user.googleId) user.googleId = googleId;
+      if (!user.avatar && picture) user.avatar = picture;
+      if (adminEmail && user.email.toLowerCase() === adminEmail.toLowerCase() && user.role !== 'admin') {
+        user.role = 'admin';
+      }
+      user.lastLogin = new Date();
+      await user.save({ validateBeforeSave: false });
+    }
+
+    if (!user.isActive) return res.status(403).json({ error: 'Account is deactivated. Contact support.' });
+
+    const token = generateToken(user._id);
+    res.json({ token, user });
+  } catch (err) {
+    console.error('Google auth error:', err.message);
+    res.status(401).json({ error: 'Google authentication failed' });
+  }
 };
