@@ -15,6 +15,7 @@ const adminRoutes = require('./routes/admin');
 const userRoutes = require('./routes/user');
 const broadcastRoutes = require('./routes/broadcast');
 const notificationRoutes = require('./routes/notifications');
+const chatbotRoutes = require('./routes/chatbot');
 
 // Init mailer (logs ✅ or ❌ on startup)
 require('./utils/mailer');
@@ -71,6 +72,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/broadcast', broadcastRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/chatbot', chatbotRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'OK', time: new Date() }));
 

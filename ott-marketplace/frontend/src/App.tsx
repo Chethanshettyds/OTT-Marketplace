@@ -15,6 +15,7 @@ import BroadcastsPage from './app/pages/BroadcastsPage';
 import CheckoutPage from './app/pages/CheckoutPage';
 import { useAuth } from './app/hooks/useAuth';
 import { useUserActivity } from './app/hooks/useUserActivity';
+import AIChatbot from './app/components/AIChatbot';
 
 function AppRoutes() {
   const { isAuthenticated, isAdmin } = useAuth();
@@ -92,6 +93,8 @@ function AppRoutes() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      {/* AI Chatbot — shown to authenticated users only */}
+      {isAuthenticated && <AIChatbot />}
     </>
   );
 }

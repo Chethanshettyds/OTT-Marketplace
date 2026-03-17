@@ -15,8 +15,9 @@ import { useNotifications } from '../hooks/useNotifications';
 import { io as socketIO } from 'socket.io-client';
 import LiveUsersPanel, { OnlineUser } from '../components/LiveUsersPanel';
 import OrdersSearchBar, { FilterField } from '../components/OrdersSearchBar';
+import ChatbotAnalytics from '../components/ChatbotAnalytics';
 
-const TABS = ['Dashboard', 'Products', 'Orders', 'Users', 'Payments', 'Tickets', 'Broadcast', 'Settings'];
+const TABS = ['Dashboard', 'Products', 'Orders', 'Users', 'Payments', 'Tickets', 'Broadcast', 'AI Chat', 'Settings'];
 
 interface PaymentMethod {
   _id: string; type: string; label: string;
@@ -1148,6 +1149,9 @@ export default function AdminPanel() {
               )}
             </div>
           )}
+
+          {/* ── AI Chat Analytics ── */}
+          {activeTab === 'AI Chat' && <ChatbotAnalytics />}
 
           {/* ── Settings ── */}
           {activeTab === 'Settings' && (
