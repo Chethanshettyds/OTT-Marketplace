@@ -170,6 +170,9 @@ function OrderCard({ order, onNavigate }: { order: OrderResult; onNavigate: () =
           </svg>
         </button>
       </div>
+    </div>
+  );
+}
 
 // ── TopicMenu — rendered inside a bot bubble ──────────────────────────────────
 function TopicMenu({ buttons, onSelect, disabled }: {
