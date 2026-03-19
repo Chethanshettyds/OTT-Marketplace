@@ -16,6 +16,8 @@ import { io as socketIO } from 'socket.io-client';
 import LiveUsersPanel, { OnlineUser } from '../components/LiveUsersPanel';
 import OrdersSearchBar, { FilterField } from '../components/OrdersSearchBar';
 import ChatbotAnalytics from '../components/ChatbotAnalytics';
+import YourDevices from '../components/YourDevices';
+import { useAuthStore } from '../store/authStore';
 
 const TABS = ['Dashboard', 'Products', 'Orders', 'Users', 'Payments', 'Tickets', 'Broadcast', 'AI Chat', 'Settings'];
 
@@ -83,6 +85,21 @@ export default function AdminPanel() {
   const [showAddPay, setShowAddPay] = useState(false);
   const [payForm, setPayForm] = useState<AddMethodForm>(EMPTY_FORM);
   const [paySaving, setPaySaving] = useState(false);
+
+  // ── Password & Security (Settings tab) ───────────────────────────────────────
+  const { user: adminUser, setToken: setAdminToken } = useAuthStore();
+  const [showCurPw, setShowCurPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConPw, setShowConPw] = useState(false);
+  const [changingPw, setChangingPw] = useState(false);
+  const {
+    register: regPw,
+    handleSubmit: handlePwSubmit,
+    watch: watchPw,
+    reset: resetPw,
+    formState: { errors: pwErrors },
+  } = useForm<{ currentPassword: string; newPassword: string; confirmPassword: string }>();
+  const newPwVal = watchPw('newPassword', '');
 
   // ── Broadcast tab ─────────────────────────────────────────────────────────
   interface BroadcastRecord {
@@ -315,6 +332,23 @@ export default function AdminPanel() {
       u._id === userId ? { ...u, wallet: newBalance, walletBalance: newBalance } : u
     ));
     fetchPayments(); // refresh payments table
+  };
+
+  const onChangeAdminPassword = async (data: { currentPassword: string; newPassword: string; confirmPassword: string }) => {
+    if (data.newPassword !== data.confirmPassword) { toast.error('Passwords do not match'); return; }
+    setChangingPw(true);
+    try {
+      const { data: res } = await api.post('/auth/change-password', {
+        currentPassword: data.currentPassword,
+        newPassword: data.newPassword,
+      });
+      if (res.token) setAdminToken(res.token);
+      toast.success('Password updated successfully');
+      resetPw();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Something went wrong');
+    }
+    setChangingPw(false);
   };
 
   const statCards = stats ? [
@@ -1372,6 +1406,101 @@ export default function AdminPanel() {
                   )}
                 </div>
               </div>
+
+              {/* ── Password & Security ── */}
+              <div className="glass rounded-2xl border border-white/10 overflow-hidden">
+                <div className="flex items-center gap-2 p-5 border-b border-white/10">
+                  <i className="pi pi-shield text-indigo-400" />
+                  <h2 className="text-white font-semibold">Password &amp; Security</h2>
+                  <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full border border-purple-500/30 ml-1">Admin account</span>
+                </div>
+                <div className="p-5">
+                  {adminUser && !adminUser.password && adminUser.googleId ? (
+                    <div className="text-center py-6 text-white/40">
+                      <i className="pi pi-google text-3xl mb-3 block text-white/20" />
+                      <p className="text-sm">You signed in with Google. Password change is not available.</p>
+                    </div>
+                  ) : (
+                    <form onSubmit={handlePwSubmit(onChangeAdminPassword)} className="space-y-4">
+                      {/* Current */}
+                      <div>
+                        <label className="text-white/70 text-sm font-medium block mb-2">Current password</label>
+                        <div className="relative">
+                          <i className="pi pi-lock absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm" />
+                          <input {...regPw('currentPassword', { required: 'Required' })}
+                            type={showCurPw ? 'text' : 'password'} placeholder="••••••••"
+                            className="input-field pl-10 pr-10" />
+                          <button type="button" onClick={() => setShowCurPw(!showCurPw)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors">
+                            <i className={`pi ${showCurPw ? 'pi-eye-slash' : 'pi-eye'} text-sm`} />
+                          </button>
+                        </div>
+                        {pwErrors.currentPassword && <p className="text-red-400 text-xs mt-1">{pwErrors.currentPassword.message}</p>}
+                      </div>
+                      {/* New */}
+                      <div>
+                        <label className="text-white/70 text-sm font-medium block mb-2">New password</label>
+                        <div className="relative">
+                          <i className="pi pi-lock absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm" />
+                          <input {...regPw('newPassword', {
+                            required: 'Required',
+                            minLength: { value: 8, message: 'At least 8 characters' },
+                            pattern: { value: /(?=.*[a-zA-Z])(?=.*\d)/, message: 'Must contain letters and numbers' },
+                          })}
+                            type={showNewPw ? 'text' : 'password'} placeholder="••••••••"
+                            className="input-field pl-10 pr-10" />
+                          <button type="button" onClick={() => setShowNewPw(!showNewPw)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors">
+                            <i className={`pi ${showNewPw ? 'pi-eye-slash' : 'pi-eye'} text-sm`} />
+                          </button>
+                        </div>
+                        {pwErrors.newPassword && <p className="text-red-400 text-xs mt-1">{pwErrors.newPassword.message}</p>}
+                        {newPwVal && (
+                          <div className="mt-2 space-y-1">
+                            {[
+                              { label: 'At least 8 characters', ok: newPwVal.length >= 8 },
+                              { label: 'Contains a letter', ok: /[a-zA-Z]/.test(newPwVal) },
+                              { label: 'Contains a number', ok: /\d/.test(newPwVal) },
+                            ].map(({ label, ok }) => (
+                              <p key={label} className={`text-xs flex items-center gap-1.5 ${ok ? 'text-emerald-400' : 'text-white/30'}`}>
+                                <i className={`pi ${ok ? 'pi-check-circle' : 'pi-circle'} text-xs`} />{label}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {/* Confirm */}
+                      <div>
+                        <label className="text-white/70 text-sm font-medium block mb-2">Confirm new password</label>
+                        <div className="relative">
+                          <i className="pi pi-lock absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm" />
+                          <input {...regPw('confirmPassword', { required: 'Required' })}
+                            type={showConPw ? 'text' : 'password'} placeholder="••••••••"
+                            className="input-field pl-10 pr-10" />
+                          <button type="button" onClick={() => setShowConPw(!showConPw)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors">
+                            <i className={`pi ${showConPw ? 'pi-eye-slash' : 'pi-eye'} text-sm`} />
+                          </button>
+                        </div>
+                        {pwErrors.confirmPassword && <p className="text-red-400 text-xs mt-1">{pwErrors.confirmPassword.message}</p>}
+                      </div>
+                      <div className="flex justify-end pt-1">
+                        <motion.button type="submit" disabled={changingPw}
+                          className="btn-primary px-6 py-2.5 text-sm font-semibold disabled:opacity-50"
+                          whileTap={{ scale: 0.98 }}>
+                          {changingPw
+                            ? <span className="flex items-center gap-2"><i className="pi pi-spin pi-spinner" /> Saving...</span>
+                            : 'Save changes'}
+                        </motion.button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Your Devices ── */}
+              <YourDevices isAdmin />
+
             </div>
           )}
 
