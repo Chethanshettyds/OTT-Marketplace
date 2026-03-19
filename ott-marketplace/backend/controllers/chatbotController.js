@@ -142,10 +142,11 @@ RESPONSE RULES:
 - Never share credentials in chat — direct to Dashboard
 - If unsure, say "Let me connect you with our team" and offer escalation`;
 
-  const apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
-  const useGemini = !!(process.env.GEMINI_API_KEY);
+  const groqKey = process.env.GROQ_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY;
 
-  if (!apiKey) {
+  if (!groqKey && !geminiKey && !openaiKey) {
     const fallback = getFallbackResponse(intent, lastUserMsg);
     if (intent === 'escalation') analytics.escalations++;
     else analytics.resolvedByBot++;
@@ -155,9 +156,33 @@ RESPONSE RULES:
   try {
     let reply;
 
-    if (useGemini) {
+    if (groqKey) {
+      // Primary: Groq
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${groqKey}`,
+        },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          messages: [{ role: 'system', content: systemPrompt }, ...messages],
+          max_tokens: 300,
+          temperature: 0.7,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error?.message || `Groq error ${response.status}`);
+      }
+
+      const data = await response.json();
+      reply = data.choices?.[0]?.message?.content || "I'm having trouble right now. Please try again.";
+    } else if (geminiKey) {
+      // Fallback: Gemini
       const fullPrompt = `${systemPrompt}\n\nConversation history:\n${messages.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n')}\n\nRespond as the assistant:`;
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiKey}`;
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -175,13 +200,10 @@ RESPONSE RULES:
       const data = await response.json();
       reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "I'm having trouble right now. Please try again.";
     } else {
-      // OpenAI fallback
+      // Last resort: OpenAI
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
         body: JSON.stringify({
           model: 'gpt-4o-mini',
           messages: [{ role: 'system', content: systemPrompt }, ...messages],

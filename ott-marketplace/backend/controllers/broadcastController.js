@@ -12,9 +12,12 @@ exports.generateBroadcast = async (req, res) => {
     return res.status(400).json({ error: 'A short hint or topic is required.' });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return res.status(503).json({ error: 'AI generation is not configured. Add GEMINI_API_KEY to your environment.' });
+  const groqKey = process.env.GROQ_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY;
+
+  if (!groqKey && !geminiKey && !openaiKey) {
+    return res.status(503).json({ error: 'AI generation is not configured. Add GROQ_API_KEY to your environment.' });
   }
 
   const typeDescriptions = {
@@ -43,24 +46,43 @@ Topic/hint from admin: "${hint.trim()}"
 
 Write the subject and message for this broadcast.`;
 
-  // Use Gemini if key starts with AI... pattern, otherwise fall back to OpenAI
-  const useGemini = process.env.GEMINI_API_KEY && apiKey === process.env.GEMINI_API_KEY;
-
   try {
     let subject, message;
+    let raw = '{}';
 
-    if (useGemini) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+    if (groqKey) {
+      // Primary: Groq (free, fast, no billing required)
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${groqKey}`,
+        },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 300,
+          temperature: 0.75,
+          response_format: { type: 'json_object' },
+        }),
+      });
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error?.message || `Groq returned ${response.status}`);
+      }
+
+      const data = await response.json();
+      raw = data.choices?.[0]?.message?.content || '{}';
+    } else if (geminiKey) {
+      // Fallback: Gemini
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiKey}`;
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.75,
-            maxOutputTokens: 300,
-            responseMimeType: 'application/json',
-          },
+          generationConfig: { temperature: 0.75, maxOutputTokens: 300, responseMimeType: 'application/json' },
         }),
       });
 
@@ -70,18 +92,12 @@ Write the subject and message for this broadcast.`;
       }
 
       const data = await response.json();
-      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-      const parsed = JSON.parse(raw);
-      subject = parsed.subject;
-      message = parsed.message;
+      raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
     } else {
-      // OpenAI fallback
+      // Last resort: OpenAI
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
         body: JSON.stringify({
           model: 'gpt-4o-mini',
           messages: [{ role: 'user', content: prompt }],
@@ -97,11 +113,12 @@ Write the subject and message for this broadcast.`;
       }
 
       const data = await response.json();
-      const raw = data.choices?.[0]?.message?.content || '{}';
-      const parsed = JSON.parse(raw);
-      subject = parsed.subject;
-      message = parsed.message;
+      raw = data.choices?.[0]?.message?.content || '{}';
     }
+
+    const parsed = JSON.parse(raw);
+    subject = parsed.subject;
+    message = parsed.message;
 
     if (!subject || !message) {
       throw new Error('AI response was incomplete. Please try again.');
