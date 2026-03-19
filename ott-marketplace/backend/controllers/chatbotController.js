@@ -1,5 +1,6 @@
 const Order = require('../models/Order');
 const User = require('../models/User');
+const Ticket = require('../models/Ticket');
 
 // In-memory analytics store (resets on server restart; swap for DB if needed)
 const analytics = {
@@ -138,9 +139,9 @@ PLATFORM KNOWLEDGE:
 RESPONSE RULES:
 - For order queries: always show order number, status, product name
 - For wallet queries: always show current balance and top-up link
-- For escalation requests: offer [Open Support Ticket] button
+- For escalation/ticket requests: respond ONLY with the exact text "ACTION:CREATE_TICKET" followed by a pipe and the suggested subject. Example: ACTION:CREATE_TICKET|Order cancellation request for ORD-123. Do NOT say you created a ticket. Do NOT make up ticket numbers.
 - Never share credentials in chat — direct to Dashboard
-- If unsure, say "Let me connect you with our team" and offer escalation`;
+- If unsure, say "Let me connect you with our team" and respond with ACTION:CREATE_TICKET|General support request`;
 
   const groqKey = process.env.GROQ_API_KEY;
   const geminiKey = process.env.GEMINI_API_KEY;
@@ -231,6 +232,48 @@ RESPONSE RULES:
   }
 };
 
+// ── Create Ticket from Chat ───────────────────────────────────────────────────
+exports.createTicketFromChat = async (req, res) => {
+  try {
+    const { subject, message, category, relatedOrderNumber } = req.body;
+    if (!subject || !message) {
+      return res.status(400).json({ error: 'Subject and message are required.' });
+    }
+
+    // Optionally resolve order ID from order number
+    let relatedOrder = null;
+    if (relatedOrderNumber) {
+      const order = await Order.findOne({ user: req.user._id, orderNumber: relatedOrderNumber.toUpperCase() }).select('_id');
+      if (order) relatedOrder = order._id;
+    }
+
+    const ticket = await Ticket.create({
+      user: req.user._id,
+      subject,
+      category: category || 'Other',
+      relatedOrder,
+      messages: [{
+        sender: req.user._id,
+        senderName: req.user.name,
+        senderRole: req.user.role,
+        content: message,
+      }],
+    });
+
+    analytics.escalations++;
+    trackQuery('escalation', subject);
+
+    return res.status(201).json({
+      ticketNumber: ticket.ticketNumber,
+      ticketId: ticket._id,
+      subject: ticket.subject,
+      status: ticket.status,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 exports.getAnalytics = async (req, res) => {
   const sorted = Object.entries(analytics.topTopics)
     .sort((a, b) => b[1] - a[1])
@@ -252,13 +295,13 @@ exports.getAnalytics = async (req, res) => {
 function getFallbackResponse(intent) {
   const responses = {
     order: `📦 Sure! Please share your **Order ID** (e.g. ORD-1234567-ABCDE) and I'll pull up the status right away.`,
-    wallet: `💳 To top up your wallet:\n1. Go to **Dashboard**\n2. Click **Fund Wallet**\n3. Choose your amount\n4. Complete payment\n\nYour balance updates instantly! [Go to Dashboard]`,
-    subscription: `📺 Your active subscriptions are in **Dashboard → My Subscriptions**. Credentials are delivered via email within 24 hours.\n\nHaving issues? [Open Support Ticket]`,
-    refund: `💰 Refund requests are processed within 48 hours. Please open a support ticket with your order number and we'll sort it out.\n\n[Open Support Ticket]`,
-    account: `🔐 For account issues:\n- Password reset: Login page → "Forgot Password"\n- Email issues: [Open Support Ticket]\n\nOur team responds within 2 hours.`,
-    escalation: `👋 Connecting you with our support team now! We typically respond within 2 hours.\n\n[Open Support Ticket]`,
-    pricing: `💎 OTHub offers premium OTT subscriptions at the best prices. Browse our shop to see current deals!\n\n[Browse Shop]`,
-    bug: `🐛 Sorry about that! Please describe the issue in a support ticket and our team will fix it ASAP.\n\n[Report Bug]`,
+    wallet: `💳 To top up your wallet:\n1. Go to **Dashboard**\n2. Click **Fund Wallet**\n3. Choose your amount\n4. Complete payment\n\nYour balance updates instantly!`,
+    subscription: `📺 Your active subscriptions are in **Dashboard → My Subscriptions**. Credentials are delivered via email within 24 hours.\n\nHaving issues? I can open a support ticket for you.`,
+    refund: `ACTION:CREATE_TICKET|Refund request`,
+    account: `🔐 For account issues:\n- Password reset: Login page → "Forgot Password"\n- Email issues: I can open a support ticket for you.`,
+    escalation: `ACTION:CREATE_TICKET|General support request`,
+    pricing: `💎 OTHub offers premium OTT subscriptions at the best prices. Browse our shop to see current deals!`,
+    bug: `ACTION:CREATE_TICKET|Bug report`,
     general: `👋 Hi! I'm OTHub's AI assistant. I can help with:\n• 📦 Order status\n• 💳 Wallet & top-up\n• 📺 Subscriptions\n• 🔐 Account issues\n\nWhat do you need help with?`,
   };
   return responses[intent] || responses.general;

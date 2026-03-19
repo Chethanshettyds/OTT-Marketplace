@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import api from '../utils/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type ConversationState = 'idle' | 'awaiting_order_id';
+type ConversationState = 'idle' | 'awaiting_order_id' | 'awaiting_ticket_confirm';
 
 interface OrderResult {
   orderNumber: string;
@@ -17,6 +17,13 @@ interface OrderResult {
   isRefunded: boolean;
 }
 
+interface TicketResult {
+  ticketNumber: string;
+  ticketId: string;
+  subject: string;
+  status: string;
+}
+
 interface Message {
   id: string;
   role: 'user' | 'bot';
@@ -24,8 +31,11 @@ interface Message {
   ts: Date;
   intent?: string;
   orderCard?: OrderResult | null;
+  ticketCard?: TicketResult | null;
   // special: renders topic-picker buttons instead of text
   menuButtons?: Array<{ label: string; icon: string; action: string }>;
+  // ticket confirm buttons
+  ticketConfirm?: { subject: string; relatedOrderNumber?: string };
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -174,6 +184,82 @@ function OrderCard({ order, onNavigate }: { order: OrderResult; onNavigate: () =
   );
 }
 
+// ── TicketConfirmCard — asks user to confirm before creating ─────────────────
+function TicketConfirmCard({ subject, onConfirm, onCancel, loading }: {
+  subject: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  return (
+    <div className="mt-2 rounded-xl border border-purple-500/30 overflow-hidden w-full"
+      style={{ background: 'linear-gradient(135deg, rgba(161,0,255,0.08) 0%, rgba(10,10,15,0.95) 100%)' }}>
+      <div className="px-3 py-2 border-b border-white/8 flex items-center gap-2"
+        style={{ background: 'rgba(161,0,255,0.12)' }}>
+        <span className="text-sm">🎫</span>
+        <span className="text-xs font-semibold text-purple-300">Open Support Ticket</span>
+      </div>
+      <div className="px-3 py-2.5 space-y-2">
+        <p className="text-xs text-white/60">A ticket will be created with the subject:</p>
+        <p className="text-sm font-semibold text-white leading-snug">"{subject}"</p>
+        <p className="text-[11px] text-white/40">Our team typically responds within 2 hours.</p>
+      </div>
+      <div className="px-3 pb-3 flex gap-2">
+        <button onClick={onConfirm} disabled={loading}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold
+                     bg-gradient-to-r from-[#A100FF] to-[#6600CC] text-white
+                     hover:shadow-[0_0_16px_rgba(161,0,255,0.45)] transition-all active:scale-[0.98]
+                     disabled:opacity-50 disabled:cursor-not-allowed">
+          {loading ? (
+            <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creating…</>
+          ) : (
+            <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg> Yes, create ticket</>
+          )}
+        </button>
+        <button onClick={onCancel} disabled={loading}
+          className="px-3 py-2 rounded-lg text-xs font-semibold border border-white/15 text-white/50
+                     hover:border-white/30 hover:text-white/80 transition-all disabled:opacity-40">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── TicketCreatedCard — shown after real ticket is created ────────────────────
+function TicketCreatedCard({ ticket, onNavigate }: { ticket: TicketResult; onNavigate: () => void }) {
+  return (
+    <div className="mt-2 rounded-xl border border-green-500/30 overflow-hidden w-full"
+      style={{ background: 'linear-gradient(135deg, rgba(34,197,94,0.06) 0%, rgba(10,10,15,0.95) 100%)' }}>
+      <div className="px-3 py-2 border-b border-white/8 flex items-center gap-2"
+        style={{ background: 'rgba(34,197,94,0.10)' }}>
+        <span className="text-sm">✅</span>
+        <span className="text-xs font-semibold text-green-300">Ticket Created Successfully</span>
+      </div>
+      <div className="px-3 py-2.5 space-y-1.5">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-white/40">Ticket #</span>
+          <span className="text-xs font-mono font-bold text-green-300">{ticket.ticketNumber}</span>
+          <span className="inline-flex px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-green-500/15 text-green-300 border border-green-500/30 capitalize">{ticket.status}</span>
+        </div>
+        <p className="text-sm font-medium text-white leading-snug">{ticket.subject}</p>
+        <p className="text-[11px] text-white/40">Our team will review and respond within 2 hours.</p>
+      </div>
+      <div className="px-3 pb-3">
+        <button onClick={onNavigate}
+          className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold
+                     bg-gradient-to-r from-green-600 to-emerald-600 text-white
+                     hover:shadow-[0_0_16px_rgba(34,197,94,0.35)] transition-all active:scale-[0.98]">
+          View Ticket
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── TopicMenu — rendered inside a bot bubble ──────────────────────────────────
 function TopicMenu({ buttons, onSelect, disabled }: {
   buttons: Array<{ label: string; icon: string; action: string }>;
@@ -240,6 +326,9 @@ export default function AIChatbot() {
   const [convState, setConvState] = useState<ConversationState>('idle');
   // true once a full exchange has completed — shows "New Chat" banner
   const [convDone, setConvDone] = useState(false);
+  const [ticketCreating, setTicketCreating] = useState(false);
+  // pending ticket data while awaiting user confirmation
+  const pendingTicketRef = useRef<{ subject: string; relatedOrderNumber?: string; msgId: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -287,6 +376,47 @@ export default function AIChatbot() {
     setMessages([welcome]);
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [buildWelcome]);
+
+  // ── Create real ticket ────────────────────────────────────────────────────
+  const handleCreateTicket = useCallback(async (subject: string, relatedOrderNumber?: string, confirmMsgId?: string) => {
+    setTicketCreating(true);
+    try {
+      const { data } = await api.post('/chatbot/create-ticket', {
+        subject,
+        message: `Support request opened via AI chat: ${subject}`,
+        category: relatedOrderNumber ? 'Order Issue' : 'Other',
+        relatedOrderNumber,
+      });
+
+      const ticket: TicketResult = data;
+
+      // Replace the confirm card message with the success card
+      setMessages((prev) => prev.map((m) =>
+        m.id === confirmMsgId
+          ? { ...m, ticketConfirm: undefined, ticketCard: ticket, content: '' }
+          : m
+      ));
+
+      setMessages((prev) => [...prev, {
+        id: uid(), role: 'bot', ts: new Date(),
+        content: `✅ Your ticket **${ticket.ticketNumber}** has been created. Our team will respond within 2 hours. You can track it in Support Tickets.`,
+      }]);
+
+      setConvState('idle');
+      setConvDone(true);
+      pendingTicketRef.current = null;
+    } catch (err: any) {
+      setMessages((prev) => [...prev, {
+        id: uid(), role: 'bot', ts: new Date(),
+        content: `⚠️ Couldn't create the ticket right now. Please try again or visit the Support page directly.`,
+      }]);
+      setConvState('idle');
+      setConvDone(true);
+    } finally {
+      setTicketCreating(false);
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, []);
 
   // ── Order lookup ──────────────────────────────────────────────────────────
   const handleOrderLookup = useCallback(async (orderNumber: string) => {
@@ -388,8 +518,34 @@ export default function AIChatbot() {
 
     try {
       const { data } = await api.post('/chatbot/chat', { messages: apiMessages, userId: user?._id });
-      setMessages((prev) => [...prev, { id: uid(), role: 'bot', ts: new Date(), content: data.reply, intent: data.intent }]);
-      setConvDone(true);
+
+      // Detect ACTION:CREATE_TICKET signal from AI
+      const reply: string = data.reply || '';
+      const ticketActionMatch = reply.match(/^ACTION:CREATE_TICKET\|(.+)$/m);
+
+      if (ticketActionMatch) {
+        const subject = ticketActionMatch[1].trim();
+        // Extract related order number from conversation if present
+        const allText = [...messages, userMsg].map(m => m.content).join(' ');
+        const orderMatch = allText.match(/ORD-\d+-[A-Z0-9]+/i);
+        const relatedOrderNumber = orderMatch ? orderMatch[0].toUpperCase() : undefined;
+
+        const confirmMsgId = uid();
+        pendingTicketRef.current = { subject, relatedOrderNumber, msgId: confirmMsgId };
+
+        setMessages((prev) => [...prev, {
+          id: confirmMsgId,
+          role: 'bot',
+          ts: new Date(),
+          content: `I'll open a support ticket for you right now.`,
+          ticketConfirm: { subject, relatedOrderNumber },
+          intent: 'escalation',
+        }]);
+        setConvState('awaiting_ticket_confirm');
+      } else {
+        setMessages((prev) => [...prev, { id: uid(), role: 'bot', ts: new Date(), content: reply, intent: data.intent }]);
+        setConvDone(true);
+      }
     } catch {
       setMessages((prev) => [...prev, {
         id: uid(), role: 'bot', ts: new Date(),
@@ -525,6 +681,29 @@ export default function AIChatbot() {
                   {msg.orderCard && (
                     <div className="w-full mt-1">
                       <OrderCard order={msg.orderCard} onNavigate={() => { navigate(`/dashboard?tab=orders&search=${encodeURIComponent(msg.orderCard!.orderNumber)}`); setOpen(false); }} />
+                    </div>
+                  )}
+
+                  {/* Ticket confirm card */}
+                  {msg.ticketConfirm && !msg.ticketCard && (
+                    <div className="w-full mt-1">
+                      <TicketConfirmCard
+                        subject={msg.ticketConfirm.subject}
+                        loading={ticketCreating}
+                        onConfirm={() => handleCreateTicket(msg.ticketConfirm!.subject, msg.ticketConfirm!.relatedOrderNumber, msg.id)}
+                        onCancel={() => {
+                          setMessages((prev) => prev.map((m) => m.id === msg.id ? { ...m, ticketConfirm: undefined, content: '❌ Ticket creation cancelled. Is there anything else I can help you with?' } : m));
+                          setConvState('idle');
+                          setConvDone(true);
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Ticket created card */}
+                  {msg.ticketCard && (
+                    <div className="w-full mt-1">
+                      <TicketCreatedCard ticket={msg.ticketCard} onNavigate={() => { navigate('/tickets'); setOpen(false); }} />
                     </div>
                   )}
 
