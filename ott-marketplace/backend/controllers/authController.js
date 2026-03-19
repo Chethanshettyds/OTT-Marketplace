@@ -1,7 +1,10 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/User');
-const { sendMail, welcomeMail } = require('../utils/mailer');
+const PasswordResetToken = require('../models/PasswordResetToken');
+const { sendMail, welcomeMail, passwordResetMail, passwordChangedMail } = require('../utils/mailer');
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -161,5 +164,137 @@ exports.googleAuth = async (req, res) => {
   } catch (err) {
     console.error('Google auth error:', err.message);
     res.status(401).json({ error: 'Google authentication failed' });
+  }
+};
+
+// ── Forgot Password ───────────────────────────────────────────────────────────
+// Always returns the same message to prevent account enumeration
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email required' });
+
+    const GENERIC = "If an account exists for this email, we've sent a password reset link.";
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user) return res.json({ message: GENERIC }); // don't reveal non-existence
+
+    // Expire any existing unused tokens for this user
+    await PasswordResetToken.updateMany(
+      { userId: user._id, used: false },
+      { used: true }
+    );
+
+    // Generate a cryptographically secure 64-byte raw token
+    const rawToken = crypto.randomBytes(64).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+    await PasswordResetToken.create({
+      userId: user._id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
+    });
+
+    const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/reset-password?token=${rawToken}`;
+
+    sendMail({
+      to: user.email,
+      ...passwordResetMail({ userName: user.name, resetUrl }),
+    }).catch((err) => console.error('Password reset email failed:', err.message));
+
+    res.json({ message: GENERIC });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ── Validate Reset Token ──────────────────────────────────────────────────────
+exports.validateResetToken = async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ valid: false, error: 'Token required' });
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const record = await PasswordResetToken.findOne({ tokenHash, used: false });
+
+    if (!record || record.expiresAt < new Date()) {
+      return res.json({ valid: false });
+    }
+    res.json({ valid: true });
+  } catch (err) {
+    res.status(500).json({ valid: false, error: err.message });
+  }
+};
+
+// ── Reset Password ────────────────────────────────────────────────────────────
+exports.resetPassword = async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) return res.status(400).json({ error: 'Token and new password required' });
+    if (newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    if (!/(?=.*[a-zA-Z])(?=.*\d)/.test(newPassword))
+      return res.status(400).json({ error: 'Password must contain letters and numbers' });
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const record = await PasswordResetToken.findOne({ tokenHash, used: false });
+
+    if (!record || record.expiresAt < new Date()) {
+      return res.status(400).json({ error: 'Reset link is invalid or has expired' });
+    }
+
+    const user = await User.findById(record.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Update password (pre-save hook will hash it)
+    user.password = newPassword;
+    // Rotate JWT secret per-user by bumping a passwordChangedAt field
+    // so old tokens issued before this moment are rejected on next use
+    user.passwordChangedAt = new Date();
+    await user.save();
+
+    // Mark token used and expire all other tokens for this user
+    await PasswordResetToken.updateMany({ userId: user._id }, { used: true });
+
+    sendMail({
+      to: user.email,
+      ...passwordChangedMail({ userName: user.name }),
+    }).catch((err) => console.error('Password changed email failed:', err.message));
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ── Change Password (authenticated) ──────────────────────────────────────────
+exports.changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) return res.status(400).json({ error: 'All fields required' });
+    if (newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    if (!/(?=.*[a-zA-Z])(?=.*\d)/.test(newPassword))
+      return res.status(400).json({ error: 'Password must contain letters and numbers' });
+
+    const user = await User.findById(req.user._id);
+    if (!user || !user.password) return res.status(400).json({ error: 'Cannot change password for Google-only accounts' });
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) return res.status(401).json({ error: 'Current password is incorrect' });
+
+    user.password = newPassword;
+    // Bumping passwordChangedAt invalidates all previously issued JWTs
+    user.passwordChangedAt = new Date();
+    await user.save();
+
+    sendMail({
+      to: user.email,
+      ...passwordChangedMail({ userName: user.name }),
+    }).catch((err) => console.error('Password changed email failed:', err.message));
+
+    // Issue a fresh token so the current session stays alive
+    const newToken = generateToken(user._id);
+    res.json({ message: 'Password updated successfully', token: newToken });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 };

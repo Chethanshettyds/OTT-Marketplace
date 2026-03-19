@@ -465,4 +465,100 @@ function welcomeMail({ userName, email, shopUrl }) {
   };
 }
 
-module.exports = { sendMail, welcomeMail, orderConfirmationMail, orderDeliveredMail, walletTopupMail, backInStockMail };
+function passwordResetMail({ userName, resetUrl }) {
+  const firstName = (userName || 'there').split(' ')[0];
+  const year = new Date().getFullYear();
+  return {
+    subject: 'Reset your OTTMarket password',
+    html: `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#080810;font-family:'Segoe UI',Arial,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#080810;padding:40px 16px">
+  <tr><td align="center">
+    <table width="100%" style="max-width:560px;background:#0f0f1a;border-radius:20px;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,0.6)">
+      <tr>
+        <td style="background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 50%,#a855f7 100%);padding:40px 40px;text-align:center">
+          <div style="font-size:48px;margin-bottom:12px">🔐</div>
+          <h1 style="margin:0;font-size:26px;font-weight:800;color:#fff">Reset your password</h1>
+          <p style="margin:10px 0 0;color:rgba(255,255,255,0.75);font-size:15px">OTTMarket account security</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:36px 40px">
+          <p style="margin:0 0 20px;font-size:16px;color:#e2e8f0">Hi <strong>${firstName}</strong>,</p>
+          <p style="margin:0 0 28px;font-size:15px;color:#94a3b8;line-height:1.7">
+            We received a request to reset the password for your OTTMarket account.
+            Click the button below to create a new password. This link expires in <strong style="color:#e2e8f0">1 hour</strong>.
+          </p>
+          <div style="text-align:center;margin-bottom:28px">
+            <a href="${resetUrl}" style="display:inline-block;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;text-decoration:none;padding:16px 48px;border-radius:50px;font-size:15px;font-weight:700;box-shadow:0 8px 32px rgba(99,102,241,0.45)">
+              Reset Password
+            </a>
+          </div>
+          <div style="background:#1e1e2e;border-radius:10px;padding:14px 18px;margin-bottom:24px;border:1px solid rgba(255,255,255,0.06)">
+            <p style="margin:0 0 6px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px">Or copy this link</p>
+            <p style="margin:0;font-size:12px;color:#818cf8;word-break:break-all">${resetUrl}</p>
+          </div>
+          <p style="margin:0;font-size:13px;color:#475569;line-height:1.6">
+            If you didn't request a password reset, you can safely ignore this email — your password won't change.
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td style="background:rgba(0,0,0,0.25);padding:20px 40px;text-align:center;border-top:1px solid rgba(255,255,255,0.06)">
+          <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.2)">© ${year} OTTMarket. All rights reserved.</p>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`,
+  };
+}
+
+function passwordChangedMail({ userName }) {
+  const firstName = (userName || 'there').split(' ')[0];
+  const year = new Date().getFullYear();
+  return {
+    subject: 'Your OTTMarket password was changed',
+    html: `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/></head>
+<body style="margin:0;padding:0;background:#080810;font-family:'Segoe UI',Arial,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#080810;padding:40px 16px">
+  <tr><td align="center">
+    <table width="100%" style="max-width:560px;background:#0f0f1a;border-radius:20px;overflow:hidden">
+      <tr>
+        <td style="background:linear-gradient(135deg,#059669,#10b981);padding:36px 40px;text-align:center">
+          <div style="font-size:44px;margin-bottom:10px">✅</div>
+          <h1 style="margin:0;font-size:24px;font-weight:800;color:#fff">Password Changed</h1>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:32px 40px">
+          <p style="margin:0 0 16px;font-size:16px;color:#e2e8f0">Hi <strong>${firstName}</strong>,</p>
+          <p style="margin:0 0 24px;font-size:15px;color:#94a3b8;line-height:1.7">
+            Your OTTMarket account password was successfully changed.
+          </p>
+          <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:10px;padding:16px 20px;margin-bottom:24px">
+            <p style="margin:0;font-size:14px;color:#fca5a5;font-weight:600">⚠️ Wasn't you?</p>
+            <p style="margin:6px 0 0;font-size:13px;color:#94a3b8">If you didn't make this change, reset your password immediately and contact support.</p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td style="background:rgba(0,0,0,0.25);padding:20px 40px;text-align:center;border-top:1px solid rgba(255,255,255,0.06)">
+          <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.2)">© ${year} OTTMarket. All rights reserved.</p>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`,
+  };
+}
+
+module.exports = { sendMail, welcomeMail, orderConfirmationMail, orderDeliveredMail, walletTopupMail, backInStockMail, passwordResetMail, passwordChangedMail };

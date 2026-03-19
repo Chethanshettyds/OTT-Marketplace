@@ -44,6 +44,7 @@ const userSchema = new mongoose.Schema(
     welcomeEmailSent: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
     lastLogin: { type: Date },
+    passwordChangedAt: { type: Date },
     paymentMethods: [paymentMethodSchema],
     activeSubscriptions: [activeSubscriptionSchema],
   },

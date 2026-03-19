@@ -94,6 +94,11 @@ export default function AuthLogin() {
                 </button>
               </div>
               {errors.password && <p className="text-red-400 text-xs mt-1">{errors.password.message}</p>}
+              <div className="text-right mt-1.5">
+                <Link to="/forgot-password" className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold transition-colors hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
             </div>
 
             <motion.button

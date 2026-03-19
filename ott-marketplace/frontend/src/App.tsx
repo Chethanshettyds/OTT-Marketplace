@@ -6,6 +6,8 @@ import LandingPage from './app/pages/LandingPage';
 import Home3DShop from './app/pages/Home3DShop';
 import AuthLogin from './app/pages/AuthLogin';
 import AuthSignup from './app/pages/AuthSignup';
+import ForgotPassword from './app/pages/ForgotPassword';
+import ResetPassword from './app/pages/ResetPassword';
 import UserDashboard from './app/pages/UserDashboard';
 import AdminPanel from './app/pages/AdminPanel';
 import TicketsPage from './app/pages/TicketsPage';
@@ -35,6 +37,8 @@ function AppRoutes() {
           path="/signup"
           element={isAuthenticated ? <Navigate to="/shop" replace /> : <AuthSignup />}
         />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route
           path="/dashboard"
           element={

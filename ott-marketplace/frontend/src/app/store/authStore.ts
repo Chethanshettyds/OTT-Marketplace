@@ -9,6 +9,8 @@ interface User {
   role: 'user' | 'admin';
   wallet: number;
   avatar?: string;
+  googleId?: string;
+  password?: string;
   createdAt: string;
 }
 
@@ -20,6 +22,7 @@ interface AuthState {
   register: (name: string, email: string, password: string) => Promise<void>;
   googleLogin: (credential: string) => Promise<void>;
   logout: () => void;
+  setToken: (token: string) => void;
   updateUser: (user: Partial<User>) => void;
   refreshUser: () => Promise<void>;
 }
@@ -70,6 +73,12 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         delete api.defaults.headers.common['Authorization'];
         set({ user: null, token: null });
+      },
+
+      // Refresh the stored token after a password change so the current session stays alive
+      setToken: (token: string) => {
+        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        set({ token });
       },
 
       updateUser: (updates) => {
