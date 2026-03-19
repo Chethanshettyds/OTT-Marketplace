@@ -29,4 +29,9 @@ router.put('/orders/:id/status', ctrl.updateOrderStatus);
 // ── Payments ───────────────────────────────────────────────────────────────
 router.get('/payments', ctrl.listPayments);
 
+// ── Reports ────────────────────────────────────────────────────────────────
+router.get('/reports/payments', ctrl.reportPayments);
+router.get('/reports/orders',   ctrl.reportOrders);
+router.get('/reports/tickets',  ctrl.reportTickets);
+
 module.exports = router;

@@ -18,8 +18,9 @@ import OrdersSearchBar, { FilterField } from '../components/OrdersSearchBar';
 import ChatbotAnalytics from '../components/ChatbotAnalytics';
 import YourDevices from '../components/YourDevices';
 import { useAuthStore } from '../store/authStore';
+import AdminReports from '../components/AdminReports';
 
-const TABS = ['Dashboard', 'Products', 'Orders', 'Users', 'Payments', 'Tickets', 'Broadcast', 'AI Chat', 'Settings'];
+const TABS = ['Dashboard', 'Products', 'Orders', 'Users', 'Payments', 'Tickets', 'Broadcast', 'AI Chat', 'Reports', 'Settings'];
 
 interface PaymentMethod {
   _id: string; type: string; label: string;
@@ -1186,6 +1187,9 @@ export default function AdminPanel() {
 
           {/* ── AI Chat Analytics ── */}
           {activeTab === 'AI Chat' && <ChatbotAnalytics />}
+
+          {/* ── Reports ── */}
+          {activeTab === 'Reports' && <AdminReports />}
 
           {/* ── Settings ── */}
           {activeTab === 'Settings' && (

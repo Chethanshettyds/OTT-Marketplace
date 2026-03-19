@@ -371,3 +371,202 @@ exports.listPayments = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+// ─── Reports ─────────────────────────────────────────────────────────────────
+
+function buildDateRange(groupBy, date, month, year) {
+  const now = new Date();
+  let start, end;
+
+  if (groupBy === 'day') {
+    const d = date ? new Date(date) : now;
+    start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+    end   = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+  } else if (groupBy === 'month') {
+    const m = month !== undefined ? parseInt(month) - 1 : now.getMonth();
+    const y = year  !== undefined ? parseInt(year)  : now.getFullYear();
+    start = new Date(y, m, 1, 0, 0, 0, 0);
+    end   = new Date(y, m + 1, 0, 23, 59, 59, 999);
+  } else {
+    // year
+    const y = year !== undefined ? parseInt(year) : now.getFullYear();
+    start = new Date(y, 0, 1, 0, 0, 0, 0);
+    end   = new Date(y, 11, 31, 23, 59, 59, 999);
+  }
+  return { start, end };
+}
+
+exports.reportPayments = async (req, res) => {
+  try {
+    const { groupBy = 'month', date, month, year, status } = req.query;
+    const { start, end } = buildDateRange(groupBy, date, month, year);
+
+    const match = { createdAt: { $gte: start, $lte: end } };
+    if (status && status !== 'all') match.status = status;
+
+    const [items, summary] = await Promise.all([
+      Payment.find(match)
+        .populate('user', 'name email')
+        .populate('order', 'orderNumber')
+        .sort({ createdAt: -1 })
+        .lean(),
+      Payment.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: null,
+            totalAmount:    { $sum: '$amount' },
+            totalCount:     { $sum: 1 },
+            successCount:   { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } },
+            failedCount:    { $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] } },
+            refundedAmount: { $sum: { $cond: [{ $eq: ['$status', 'refunded'] }, '$amount', 0] } },
+          },
+        },
+      ]),
+    ]);
+
+    const formatted = items.map((p) => ({
+      _id: p._id,
+      dateTime: p.createdAt,
+      user: { id: p.user?._id, name: p.user?.name, email: p.user?.email },
+      orderId: p.order?._id,
+      orderNumber: p.order?.orderNumber,
+      amount: p.amount,
+      currency: 'INR',
+      status: p.status,
+      method: p.method,
+      type: p.type,
+      note: p.note,
+    }));
+
+    const s = summary[0] || {};
+    res.json({
+      items: formatted,
+      summary: {
+        totalAmount:    s.totalAmount    || 0,
+        currency:       'INR',
+        totalCount:     s.totalCount     || 0,
+        successCount:   s.successCount   || 0,
+        failedCount:    s.failedCount    || 0,
+        refundedAmount: s.refundedAmount || 0,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.reportOrders = async (req, res) => {
+  try {
+    const { groupBy = 'month', date, month, year, status } = req.query;
+    const { start, end } = buildDateRange(groupBy, date, month, year);
+
+    const match = { createdAt: { $gte: start, $lte: end } };
+    if (status && status !== 'all') match.status = status;
+
+    const [items, summary] = await Promise.all([
+      Order.find(match)
+        .populate('user', 'name email')
+        .sort({ createdAt: -1 })
+        .lean(),
+      Order.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: null,
+            totalOrders:   { $sum: 1 },
+            totalRevenue:  { $sum: '$amount' },
+            completed:     { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] } },
+            pending:       { $sum: { $cond: [{ $in: ['$status', ['pending', 'processing']] }, 1, 0] } },
+            cancelled:     { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
+          },
+        },
+      ]),
+    ]);
+
+    const formatted = items.map((o) => ({
+      _id: o._id,
+      createdAt: o.createdAt,
+      user: { id: o.user?._id, name: o.user?.name, email: o.user?.email },
+      planName: o.productSnapshot?.name || '—',
+      platform: o.productSnapshot?.platform || '—',
+      orderStatus: o.status,
+      paymentStatus: o.isRefunded ? 'refunded' : o.status === 'cancelled' ? 'refunded' : 'paid',
+      amount: o.amount,
+      currency: 'INR',
+      orderNumber: o.orderNumber,
+      paymentMethod: o.paymentDetails?.method || 'wallet',
+    }));
+
+    const s = summary[0] || {};
+    res.json({
+      items: formatted,
+      summary: {
+        totalOrders:  s.totalOrders  || 0,
+        completed:    s.completed    || 0,
+        pending:      s.pending      || 0,
+        cancelled:    s.cancelled    || 0,
+        totalRevenue: s.totalRevenue || 0,
+        currency:     'INR',
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+const Ticket = require('../models/Ticket');
+
+exports.reportTickets = async (req, res) => {
+  try {
+    const { groupBy = 'month', date, month, year, status } = req.query;
+    const { start, end } = buildDateRange(groupBy, date, month, year);
+
+    const match = { createdAt: { $gte: start, $lte: end } };
+    if (status && status !== 'all') match.status = status;
+
+    const [items, summary] = await Promise.all([
+      Ticket.find(match)
+        .populate('user', 'name email')
+        .sort({ createdAt: -1 })
+        .lean(),
+      Ticket.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: null,
+            totalTickets: { $sum: 1 },
+            open:         { $sum: { $cond: [{ $eq: ['$status', 'open'] }, 1, 0] } },
+            inProgress:   { $sum: { $cond: [{ $eq: ['$status', 'in-progress'] }, 1, 0] } },
+            closed:       { $sum: { $cond: [{ $eq: ['$status', 'closed'] }, 1, 0] } },
+          },
+        },
+      ]),
+    ]);
+
+    const formatted = items.map((t) => ({
+      _id: t._id,
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt,
+      user: { id: t.user?._id, name: t.user?.name, email: t.user?.email },
+      subject: t.subject,
+      priority: t.priority,
+      status: t.status,
+      ticketNumber: t.ticketNumber,
+      category: t.category,
+    }));
+
+    const s = summary[0] || {};
+    res.json({
+      items: formatted,
+      summary: {
+        totalTickets: s.totalTickets || 0,
+        open:         s.open         || 0,
+        inProgress:   s.inProgress   || 0,
+        closed:       s.closed       || 0,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
