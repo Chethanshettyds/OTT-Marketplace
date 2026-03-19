@@ -170,9 +170,6 @@ function OrderCard({ order, onNavigate }: { order: OrderResult; onNavigate: () =
           </svg>
         </button>
       </div>
-    </div>
-  );
-}
 
 // ── TopicMenu — rendered inside a bot bubble ──────────────────────────────────
 function TopicMenu({ buttons, onSelect, disabled }: {
@@ -524,7 +521,7 @@ export default function AIChatbot() {
                   {/* Order card */}
                   {msg.orderCard && (
                     <div className="w-full mt-1">
-                      <OrderCard order={msg.orderCard} onNavigate={() => { navigate('/dashboard'); setOpen(false); }} />
+                      <OrderCard order={msg.orderCard} onNavigate={() => { navigate(`/dashboard?tab=orders&search=${encodeURIComponent(msg.orderCard!.orderNumber)}`); setOpen(false); }} />
                     </div>
                   )}
 

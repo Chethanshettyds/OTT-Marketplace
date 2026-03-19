@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useCurrency } from '../hooks/useCurrency';
 import OrdersSearchBar, { FilterField } from './OrdersSearchBar';
 
@@ -14,6 +14,7 @@ interface Order {
 interface OrderHistoryTableProps {
   orders: Order[];
   loading?: boolean;
+  initialSearch?: string;
 }
 
 function formatOrderDateTime(iso: string): string {
@@ -36,12 +37,21 @@ type PageSize = typeof PAGE_SIZES[number];
 
 const USER_FILTERS: FilterField[] = ['orderId', 'product', 'duration'];
 
-export default function OrderHistoryTable({ orders, loading }: OrderHistoryTableProps) {
+export default function OrderHistoryTable({ orders, loading, initialSearch = '' }: OrderHistoryTableProps) {
   const { format } = useCurrency();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(10);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterField, setFilterField] = useState<FilterField>('orderId');
+  const [searchTerm, setSearchTerm] = useState(initialSearch);
+  const [filterField, setFilterField] = useState<FilterField>(initialSearch ? 'orderId' : 'orderId');
+
+  // When initialSearch changes (e.g. navigated from chatbot), apply it
+  useEffect(() => {
+    if (initialSearch) {
+      setSearchTerm(initialSearch);
+      setFilterField('orderId');
+      setPage(1);
+    }
+  }, [initialSearch]);
 
   const filtered = useMemo(() => {
     const t = searchTerm.trim().toLowerCase();
@@ -100,6 +110,8 @@ export default function OrderHistoryTable({ orders, loading }: OrderHistoryTable
         filteredCount={filtered.length}
         onSearch={handleSearch}
         onClear={handleClear}
+        initialValue={initialSearch}
+        initialField="orderId"
       />
 
       {/* Scrollable table */}
@@ -126,10 +138,24 @@ export default function OrderHistoryTable({ orders, loading }: OrderHistoryTable
             ) : paginated.map((order) => (
               <tr
                 key={order._id}
-                className="border-b border-slate-800/70 last:border-none hover:bg-slate-900/60 transition-colors"
+                className={`border-b border-slate-800/70 last:border-none transition-colors
+                  ${initialSearch && order.orderNumber.toLowerCase() === initialSearch.toLowerCase()
+                    ? 'bg-violet-500/10 border-l-2 border-l-violet-500 hover:bg-violet-500/15'
+                    : 'hover:bg-slate-900/60'
+                  }`}
               >
                 <td className="px-4 py-3.5 text-slate-400 font-mono text-xs whitespace-nowrap">
-                  {order.orderNumber}
+                  <div className="flex items-center gap-2">
+                    {order.orderNumber}
+                    {initialSearch && order.orderNumber.toLowerCase() === initialSearch.toLowerCase() && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                        <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Found
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3.5 text-white font-medium whitespace-nowrap">
                   {order.productSnapshot?.name}

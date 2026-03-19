@@ -11,6 +11,8 @@ interface OrdersSearchBarProps {
   filteredCount: number;
   onSearch: (term: string, field: FilterField) => void;
   onClear: () => void;
+  initialValue?: string;
+  initialField?: FilterField;
 }
 
 const FILTER_LABELS: Record<FilterField, string> = {
@@ -22,13 +24,21 @@ const FILTER_LABELS: Record<FilterField, string> = {
 };
 
 export default function OrdersSearchBar({
-  filters, totalCount, filteredCount, onSearch, onClear,
+  filters, totalCount, filteredCount, onSearch, onClear, initialValue = '', initialField,
 }: OrdersSearchBarProps) {
-  const [term, setTerm] = useState('');
-  const [field, setField] = useState<FilterField>(filters[0]);
+  const [term, setTerm] = useState(initialValue);
+  const [field, setField] = useState<FilterField>(initialField ?? filters[0]);
   const [dropOpen, setDropOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dropRef = useRef<HTMLDivElement>(null);
+
+  // Sync if parent pushes a new initialValue (e.g. from chatbot navigation)
+  useEffect(() => {
+    if (initialValue && initialValue !== term) {
+      setTerm(initialValue);
+      setField(initialField ?? 'orderId');
+    }
+  }, [initialValue]);
 
   // close dropdown on outside click
   useEffect(() => {

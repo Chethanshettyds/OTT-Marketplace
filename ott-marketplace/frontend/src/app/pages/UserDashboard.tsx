@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
 import { useAuthStore } from '../store/authStore';
 import { useCurrency } from '../hooks/useCurrency';
+import { useSearchParams } from 'react-router-dom';
 
 interface Order {
   _id: string;
@@ -27,7 +28,11 @@ export default function UserDashboard() {
   const { user } = useAuth();
   const { updateUser } = useAuthStore();
   const { format } = useCurrency();
-  const [activeTab, setActiveTab] = useState('Overview');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => {
+    return searchParams.get('tab') === 'orders' ? 'Orders' : 'Overview';
+  });
+  const initialSearch = searchParams.get('search') || '';
   const [walletOpen, setWalletOpen] = useState(false);
   const [subsOpen, setSubsOpen] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -140,7 +145,11 @@ export default function UserDashboard() {
           {tabs.map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+                setActiveTab(tab);
+                // clear query params when user manually switches tabs
+                setSearchParams({});
+              }}
               className={`px-5 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                 activeTab === tab
                   ? 'bg-indigo-500 text-white shadow-lg'
@@ -210,7 +219,7 @@ export default function UserDashboard() {
           {activeTab === 'Orders' && (
             <div className="glass rounded-2xl p-6 border border-white/10">
               <h3 className="text-white font-semibold text-lg mb-4">Order History</h3>
-              <OrderHistoryTable orders={orders} loading={ordersLoading} />
+              <OrderHistoryTable orders={orders} loading={ordersLoading} initialSearch={initialSearch} />
             </div>
           )}
 
