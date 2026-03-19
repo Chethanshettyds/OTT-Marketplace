@@ -6,6 +6,24 @@ const Payment = require('../models/Payment');
 const { body, validationResult } = require('express-validator');
 const { sendMail, walletTopupMail, orderDeliveredMail } = require('../utils/mailer');
 
+// Platform → default category mapping
+const PLATFORM_CATEGORIES = {
+  'spotify': 'Music',
+  'apple music': 'Music',
+  'youtube music': 'Music',
+  'netflix': 'Video',
+  'amazon prime': 'Video',
+  'youtube premium': 'Video',
+  'disney+': 'Video',
+  'apple tv+': 'Video',
+  'hbo max': 'Video',
+  'hulu': 'Video',
+  'crunchyroll': 'Video',
+  'paramount+': 'Video',
+  'xbox game pass': 'Gaming',
+  'playstation plus': 'Gaming',
+};
+
 // Apply auto-theme + default services if not manually provided
 function applyAutoTheme(body) {
   const key = (body.platform || '').toLowerCase();
@@ -15,6 +33,10 @@ function applyAutoTheme(body) {
     if (!body.gradientTo || body.gradientTo === '#8b5cf6') body.gradientTo = theme.gradientTo;
     if (!body.priceColor) body.priceColor = theme.priceColor;
     body.color = body.gradientFrom;
+  }
+  // Auto-assign category from platform if not explicitly set
+  if (!body.category && PLATFORM_CATEGORIES[key]) {
+    body.category = PLATFORM_CATEGORIES[key];
   }
   // Auto-fill services if empty
   if (!body.services || body.services.length === 0) {

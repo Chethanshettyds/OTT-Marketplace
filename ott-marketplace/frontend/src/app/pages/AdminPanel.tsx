@@ -1537,6 +1537,14 @@ export default function AdminPanel() {
               <input {...register('originalPrice', { required: true, valueAsNumber: true })} type="number" step="0.01" className="input-field text-sm" />
             </div>
             <div>
+              <label className="text-white/70 text-sm block mb-1">Category</label>
+              <select {...register('category')} className="input-field text-sm">
+                {['Video', 'Music', 'Gaming', 'Bundle'].map((c) => (
+                  <option key={c} value={c} className="bg-dark-800">{c}</option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="text-white/70 text-sm block mb-1">Duration</label>
               <input {...register('duration', { required: true })} placeholder="1 Month" className="input-field text-sm" />
             </div>
