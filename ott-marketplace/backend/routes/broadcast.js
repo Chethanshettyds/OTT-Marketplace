@@ -8,6 +8,7 @@ router.get('/my/inbox', authJWT, ctrl.getMyBroadcasts);
 router.post('/:id/read', authJWT, ctrl.markRead);
 
 // ── Admin routes ──────────────────────────────────────────────────────────────
+router.post('/generate', authJWT, adminGuard, ctrl.generateBroadcast);
 router.post('/', authJWT, adminGuard, ctrl.broadcastLimiter, ctrl.sendBroadcast);
 router.get('/', authJWT, adminGuard, ctrl.listBroadcasts);
 router.get('/:id', authJWT, adminGuard, ctrl.getBroadcast);

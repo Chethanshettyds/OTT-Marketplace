@@ -4,6 +4,92 @@ const User = require('../models/User');
 const Order = require('../models/Order');
 const rateLimit = require('express-rate-limit');
 
+// ── POST /api/broadcast/generate (admin only) ─────────────────────────────────
+exports.generateBroadcast = async (req, res) => {
+  const { broadcastType, hint } = req.body;
+
+  if (!hint || !hint.trim()) {
+    return res.status(400).json({ error: 'A short hint or topic is required.' });
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({ error: 'AI generation is not configured. Add OPENAI_API_KEY to your environment.' });
+  }
+
+  const typeDescriptions = {
+    promo:       'a promotional offer or discount announcement',
+    maintenance: 'a scheduled maintenance or downtime notice',
+    update:      'a new feature or product update announcement',
+    alert:       'an important account or security alert',
+    general:     'a general informational message',
+  };
+
+  const typeDesc = typeDescriptions[broadcastType] || typeDescriptions.general;
+
+  const systemPrompt = `You are a professional marketing copywriter for OTHub, a premium OTT subscription marketplace where users buy Netflix, Spotify, Amazon Prime, and other streaming subscriptions at discounted prices.
+
+Write a broadcast notification for the admin to send to users. The tone should be warm, engaging, and professional — not spammy.
+
+Rules:
+- Subject: max 60 characters, punchy and clear
+- Message: 2–4 sentences, friendly tone, ends with a clear call to action
+- Do NOT use placeholder text like [DATE] or [NAME]
+- Do NOT use markdown formatting in the message
+- Return ONLY valid JSON in this exact format: {"subject":"...","message":"..."}`;
+
+  const userPrompt = `Broadcast type: ${typeDesc}
+Topic/hint from admin: "${hint.trim()}"
+
+Write the subject and message for this broadcast.`;
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        max_tokens: 300,
+        temperature: 0.75,
+        response_format: { type: 'json_object' },
+      }),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => ({}));
+      throw new Error(errBody.error?.message || `OpenAI returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    const raw = data.choices?.[0]?.message?.content || '{}';
+
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new Error('AI returned malformed JSON. Please try again.');
+    }
+
+    if (!parsed.subject || !parsed.message) {
+      throw new Error('AI response was incomplete. Please try again.');
+    }
+
+    return res.json({
+      subject: parsed.subject.trim(),
+      message: parsed.message.trim(),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || 'AI generation failed. Please try again.' });
+  }
+};
+
 // ── Rate limit: max 5 broadcasts per hour per admin ──────────────────────────
 exports.broadcastLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,

@@ -12,6 +12,15 @@ interface BroadcastModalProps {
 }
 
 type BcastType = 'all' | 'selected' | 'group' | 'specific';
+type AiBroadcastType = 'promo' | 'maintenance' | 'update' | 'alert' | 'general';
+
+const AI_BROADCAST_TYPES: { value: AiBroadcastType; label: string; icon: string; desc: string }[] = [
+  { value: 'promo',       icon: '🎉', label: 'Promotion',    desc: 'Offer or discount' },
+  { value: 'update',      icon: '🚀', label: 'New Feature',  desc: 'Product update' },
+  { value: 'maintenance', icon: '🔧', label: 'Maintenance',  desc: 'Downtime notice' },
+  { value: 'alert',       icon: '⚠️', label: 'Alert',        desc: 'Account notice' },
+  { value: 'general',     icon: '📣', label: 'General',      desc: 'Informational' },
+];
 
 const TEMPLATES = [
   { id: 'promo',       label: '🎉 Promotion',    subject: 'Exclusive Deal Just for You!',       body: 'Hi! We have an exclusive offer available for a limited time. Check it out now on OTT Market.' },
@@ -39,6 +48,12 @@ export default function BroadcastModal({ isOpen, onClose, onSent }: BroadcastMod
   const [preview, setPreview] = useState(false);
   const [totalUsers, setTotalUsers] = useState(0);
 
+  // ── AI generation state ───────────────────────────────────────────────────
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [aiType, setAiType] = useState<AiBroadcastType>('promo');
+  const [aiHint, setAiHint] = useState('');
+  const [aiGenerating, setAiGenerating] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
       api.get('/admin/users').then(({ data }) => setTotalUsers(data.users.length)).catch(() => {});
@@ -48,6 +63,26 @@ export default function BroadcastModal({ isOpen, onClose, onSent }: BroadcastMod
   const applyTemplate = (tpl: typeof TEMPLATES[0]) => {
     setSubject(tpl.subject);
     setMessage(tpl.body);
+  };
+
+  const handleGenerate = async () => {
+    if (!aiHint.trim()) return toast.error('Enter a short topic or hint first.');
+    setAiGenerating(true);
+    try {
+      const { data } = await api.post('/broadcast/generate', {
+        broadcastType: aiType,
+        hint: aiHint.trim(),
+      });
+      setSubject(data.subject);
+      setMessage(data.message);
+      setAiPanelOpen(false);
+      setAiHint('');
+      toast.success('AI draft applied — review and edit before sending.');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'AI generation failed. Please try again.');
+    } finally {
+      setAiGenerating(false);
+    }
   };
 
   const searchUsers = async (q: string) => {
@@ -105,6 +140,7 @@ export default function BroadcastModal({ isOpen, onClose, onSent }: BroadcastMod
     setType('all'); setSubject(''); setMessage('');
     setSpecificEmail(''); setSearchResults([]);
     setSelectedUsers([]); setPreview(false);
+    setAiPanelOpen(false); setAiHint(''); setAiType('promo');
     onClose();
   };
 
@@ -256,6 +292,99 @@ export default function BroadcastModal({ isOpen, onClose, onSent }: BroadcastMod
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* ── AI Generate ── */}
+              <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 overflow-hidden">
+                {/* Toggle header */}
+                <button
+                  onClick={() => setAiPanelOpen((o) => !o)}
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-violet-500/10 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-sm flex-shrink-0">
+                      ✨
+                    </div>
+                    <div className="text-left">
+                      <p className="text-violet-300 text-sm font-semibold">Generate with AI</p>
+                      <p className="text-violet-400/60 text-xs">Let AI write the subject & message for you</p>
+                    </div>
+                  </div>
+                  <i className={`pi ${aiPanelOpen ? 'pi-chevron-up' : 'pi-chevron-down'} text-violet-400/60 text-xs transition-transform`} />
+                </button>
+
+                <AnimatePresence>
+                  {aiPanelOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-4 pb-4 space-y-4 border-t border-violet-500/20 pt-4">
+                        {/* Broadcast type selector */}
+                        <div>
+                          <p className="text-white/50 text-xs font-medium mb-2">Broadcast type</p>
+                          <div className="grid grid-cols-5 gap-1.5">
+                            {AI_BROADCAST_TYPES.map((t) => (
+                              <button
+                                key={t.value}
+                                onClick={() => setAiType(t.value)}
+                                className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-center transition-all ${
+                                  aiType === t.value
+                                    ? 'border-violet-500 bg-violet-500/20 text-violet-300'
+                                    : 'border-white/10 bg-white/5 text-white/50 hover:border-violet-500/40 hover:text-white/80'
+                                }`}
+                              >
+                                <span className="text-base leading-none">{t.icon}</span>
+                                <span className="text-[10px] font-medium leading-tight">{t.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Hint input */}
+                        <div>
+                          <p className="text-white/50 text-xs font-medium mb-2">
+                            What's this broadcast about?
+                            <span className="text-white/25 font-normal ml-1">(a short hint is enough)</span>
+                          </p>
+                          <div className="flex gap-2">
+                            <input
+                              value={aiHint}
+                              onChange={(e) => setAiHint(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter' && !aiGenerating) handleGenerate(); }}
+                              placeholder={
+                                aiType === 'promo'       ? 'e.g. Netflix restock, 20% off this weekend' :
+                                aiType === 'maintenance' ? 'e.g. Server upgrade on Sunday 2–4 AM' :
+                                aiType === 'update'      ? 'e.g. New 3D shop and wallet top-up feature' :
+                                aiType === 'alert'       ? 'e.g. Remind users to verify their email' :
+                                'e.g. Thank users for their support this month'
+                              }
+                              className="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm placeholder-white/25 focus:outline-none focus:border-violet-500/60 transition-all"
+                              disabled={aiGenerating}
+                            />
+                            <button
+                              onClick={handleGenerate}
+                              disabled={aiGenerating || !aiHint.trim()}
+                              className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
+                              style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}
+                            >
+                              {aiGenerating
+                                ? <><i className="pi pi-spin pi-spinner text-xs" /> Writing...</>
+                                : <><span className="text-sm">✨</span> Generate</>
+                              }
+                            </button>
+                          </div>
+                          <p className="text-white/20 text-xs mt-1.5">
+                            AI will draft the subject and message — you can edit before sending.
+                          </p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Subject */}
