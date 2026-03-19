@@ -1,16 +1,8 @@
-const https = require('https');
 const { Resend } = require('resend');
 
-// ── Brevo (HTTPS API — works on Render free tier, sends to any email) ─────────
-// Sign up free at app.brevo.com → SMTP & API → API Keys
-// Set BREVO_API_KEY in Render env vars
-
-// ── Resend fallback ────────────────────────────────────────────────────────────
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
-if (process.env.BREVO_API_KEY) {
-  console.log('✅ Mailer ready (Brevo)');
-} else if (resend) {
+if (resend) {
   console.log('✅ Mailer ready (Resend)');
 } else {
   console.warn('⚠️  No mailer configured — emails will be skipped');
@@ -21,41 +13,7 @@ if (process.env.BREVO_API_KEY) {
  * Priority: Brevo → Resend → skip
  */
 async function sendMail({ to, subject, html }) {
-  // 1. Brevo HTTPS API (works on Render free tier, sends to any email)
-  if (process.env.BREVO_API_KEY) {
-    const fromEmail = process.env.BREVO_FROM_EMAIL || 'noreply@ottmarket.com';
-    const fromName = process.env.BREVO_FROM_NAME || 'OTTMarket';
-    const payload = JSON.stringify({
-      sender: { name: fromName, email: fromEmail },
-      to: [{ email: to }],
-      subject,
-      htmlContent: html,
-    });
-    return new Promise((resolve, reject) => {
-      const req = https.request({
-        hostname: 'api.brevo.com',
-        path: '/v3/smtp/email',
-        method: 'POST',
-        headers: {
-          'api-key': process.env.BREVO_API_KEY,
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(payload),
-        },
-      }, (res) => {
-        let data = '';
-        res.on('data', (chunk) => { data += chunk; });
-        res.on('end', () => {
-          if (res.statusCode >= 200 && res.statusCode < 300) resolve();
-          else reject(new Error(`Brevo error ${res.statusCode}: ${data}`));
-        });
-      });
-      req.on('error', reject);
-      req.write(payload);
-      req.end();
-    });
-  }
-
-  // 2. Resend fallback (only works if domain verified or sending to account owner)
+  // Resend only
   if (resend) {
     const from = process.env.RESEND_FROM || 'OTTMarket <onboarding@resend.dev>';
     const { error } = await resend.emails.send({ from, to, subject, html });
