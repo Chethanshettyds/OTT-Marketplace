@@ -142,7 +142,9 @@ RESPONSE RULES:
 - Never share credentials in chat — direct to Dashboard
 - If unsure, say "Let me connect you with our team" and offer escalation`;
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
+  const useGemini = !!(process.env.GEMINI_API_KEY);
+
   if (!apiKey) {
     const fallback = getFallbackResponse(intent, lastUserMsg);
     if (intent === 'escalation') analytics.escalations++;
@@ -151,27 +153,51 @@ RESPONSE RULES:
   }
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'system', content: systemPrompt }, ...messages],
-        max_tokens: 300,
-        temperature: 0.7,
-      }),
-    });
+    let reply;
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error?.message || `OpenAI error ${response.status}`);
+    if (useGemini) {
+      const fullPrompt = `${systemPrompt}\n\nConversation history:\n${messages.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n')}\n\nRespond as the assistant:`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: fullPrompt }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 300 },
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error?.message || `Gemini error ${response.status}`);
+      }
+
+      const data = await response.json();
+      reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "I'm having trouble right now. Please try again.";
+    } else {
+      // OpenAI fallback
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'system', content: systemPrompt }, ...messages],
+          max_tokens: 300,
+          temperature: 0.7,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error?.message || `OpenAI error ${response.status}`);
+      }
+
+      const data = await response.json();
+      reply = data.choices?.[0]?.message?.content || "I'm having trouble right now. Please try again.";
     }
-
-    const data = await response.json();
-    const reply = data.choices?.[0]?.message?.content || "I'm having trouble right now. Please try again.";
 
     if (intent === 'escalation') analytics.escalations++;
     else analytics.resolvedByBot++;

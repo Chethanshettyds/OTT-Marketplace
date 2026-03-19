@@ -12,9 +12,9 @@ exports.generateBroadcast = async (req, res) => {
     return res.status(400).json({ error: 'A short hint or topic is required.' });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    return res.status(503).json({ error: 'AI generation is not configured. Add OPENAI_API_KEY to your environment.' });
+    return res.status(503).json({ error: 'AI generation is not configured. Add GEMINI_API_KEY to your environment.' });
   }
 
   const typeDescriptions = {
@@ -27,7 +27,7 @@ exports.generateBroadcast = async (req, res) => {
 
   const typeDesc = typeDescriptions[broadcastType] || typeDescriptions.general;
 
-  const systemPrompt = `You are a professional marketing copywriter for OTHub, a premium OTT subscription marketplace where users buy Netflix, Spotify, Amazon Prime, and other streaming subscriptions at discounted prices.
+  const prompt = `You are a professional marketing copywriter for OTHub, a premium OTT subscription marketplace where users buy Netflix, Spotify, Amazon Prime, and other streaming subscriptions at discounted prices.
 
 Write a broadcast notification for the admin to send to users. The tone should be warm, engaging, and professional — not spammy.
 
@@ -36,55 +36,78 @@ Rules:
 - Message: 2–4 sentences, friendly tone, ends with a clear call to action
 - Do NOT use placeholder text like [DATE] or [NAME]
 - Do NOT use markdown formatting in the message
-- Return ONLY valid JSON in this exact format: {"subject":"...","message":"..."}`;
+- Return ONLY valid JSON in this exact format: {"subject":"...","message":"..."}
 
-  const userPrompt = `Broadcast type: ${typeDesc}
+Broadcast type: ${typeDesc}
 Topic/hint from admin: "${hint.trim()}"
 
 Write the subject and message for this broadcast.`;
 
+  // Use Gemini if key starts with AI... pattern, otherwise fall back to OpenAI
+  const useGemini = process.env.GEMINI_API_KEY && apiKey === process.env.GEMINI_API_KEY;
+
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        max_tokens: 300,
-        temperature: 0.75,
-        response_format: { type: 'json_object' },
-      }),
-    });
+    let subject, message;
 
-    if (!response.ok) {
-      const errBody = await response.json().catch(() => ({}));
-      throw new Error(errBody.error?.message || `OpenAI returned ${response.status}`);
+    if (useGemini) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.75,
+            maxOutputTokens: 300,
+            responseMimeType: 'application/json',
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error?.message || `Gemini returned ${response.status}`);
+      }
+
+      const data = await response.json();
+      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      const parsed = JSON.parse(raw);
+      subject = parsed.subject;
+      message = parsed.message;
+    } else {
+      // OpenAI fallback
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 300,
+          temperature: 0.75,
+          response_format: { type: 'json_object' },
+        }),
+      });
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error?.message || `OpenAI returned ${response.status}`);
+      }
+
+      const data = await response.json();
+      const raw = data.choices?.[0]?.message?.content || '{}';
+      const parsed = JSON.parse(raw);
+      subject = parsed.subject;
+      message = parsed.message;
     }
 
-    const data = await response.json();
-    const raw = data.choices?.[0]?.message?.content || '{}';
-
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      throw new Error('AI returned malformed JSON. Please try again.');
-    }
-
-    if (!parsed.subject || !parsed.message) {
+    if (!subject || !message) {
       throw new Error('AI response was incomplete. Please try again.');
     }
 
-    return res.json({
-      subject: parsed.subject.trim(),
-      message: parsed.message.trim(),
-    });
+    return res.json({ subject: subject.trim(), message: message.trim() });
   } catch (err) {
     return res.status(500).json({ error: err.message || 'AI generation failed. Please try again.' });
   }
