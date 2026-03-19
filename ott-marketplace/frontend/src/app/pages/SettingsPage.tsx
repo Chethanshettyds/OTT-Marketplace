@@ -5,6 +5,7 @@ import api from '../utils/api';
 import toast from 'react-hot-toast';
 import { PAYMENT_TYPES } from '../utils/paymentTypes';
 import { useAuthStore } from '../store/authStore';
+import YourDevices from '../components/YourDevices';
 
 interface PaymentMethod {
   _id: string; type: string; label: string;
@@ -237,6 +238,10 @@ export default function SettingsPage() {
             )}
           </div>
         </motion.div>
+
+        {/* Your Devices */}
+        <YourDevices isAdmin={user?.role === 'admin'} />
+
       </div>
     </div>
   );

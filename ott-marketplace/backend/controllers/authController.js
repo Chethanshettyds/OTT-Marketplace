@@ -2,14 +2,43 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { OAuth2Client } = require('google-auth-library');
+const UAParser = require('ua-parser-js');
 const User = require('../models/User');
+const Session = require('../models/Session');
 const PasswordResetToken = require('../models/PasswordResetToken');
 const { sendMail, welcomeMail, passwordResetMail, passwordChangedMail } = require('../utils/mailer');
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-const generateToken = (id) =>
-  jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
+// Token now embeds sessionId so the middleware can validate the session is still active
+const generateToken = (id, sessionId) =>
+  jwt.sign({ id, sessionId }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
+
+// Parse user-agent into a friendly device name + type
+function parseDevice(ua) {
+  const parser = new UAParser(ua || '');
+  const browser = parser.getBrowser().name || 'Unknown browser';
+  const os = parser.getOS().name || 'Unknown OS';
+  const device = parser.getDevice();
+  const deviceName = `${browser} on ${os}`;
+  let deviceType = 'desktop';
+  if (device.type === 'mobile') deviceType = 'mobile';
+  else if (device.type === 'tablet') deviceType = 'tablet';
+  else if (!device.type && os.toLowerCase().includes('android')) deviceType = 'mobile';
+  else if (!device.type && (os.toLowerCase().includes('ios') || os.toLowerCase().includes('iphone'))) deviceType = 'mobile';
+  return { deviceName, deviceType };
+}
+
+// Create a session record and return a signed JWT
+async function createSession(userId, req) {
+  const sessionId = crypto.randomBytes(32).toString('hex');
+  const ua = req.headers['user-agent'] || '';
+  const ip = req.ip || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || '';
+  const { deviceName, deviceType } = parseDevice(ua);
+
+  await Session.create({ sessionId, userId, userAgent: ua, deviceName, deviceType, ipAddress: ip });
+  return { sessionId, token: generateToken(userId, sessionId) };
+}
 
 exports.register = async (req, res) => {
   try {
@@ -30,7 +59,7 @@ exports.register = async (req, res) => {
         : 'user';
 
     const user = await User.create({ name, email, password, role, welcomeEmailSent: true });
-    const token = generateToken(user._id);
+    const { token } = await createSession(user._id, req);
     res.status(201).json({ token, user });
 
     // Send welcome email (non-blocking — never delays the response)
@@ -73,7 +102,7 @@ exports.login = async (req, res) => {
     user.lastLogin = new Date();
     await user.save({ validateBeforeSave: false });
 
-    const token = generateToken(user._id);
+    const { token } = await createSession(user._id, req);
     res.json({ token, user });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -159,7 +188,7 @@ exports.googleAuth = async (req, res) => {
 
     if (!user.isActive) return res.status(403).json({ error: 'Account is deactivated. Contact support.' });
 
-    const token = generateToken(user._id);
+    const { token } = await createSession(user._id, req);
     res.json({ token, user });
   } catch (err) {
     console.error('Google auth error:', err.message);

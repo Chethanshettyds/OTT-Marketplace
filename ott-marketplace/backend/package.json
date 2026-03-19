@@ -21,7 +21,8 @@
     "nodemailer": "^6.10.1",
     "resend": "^6.9.4",
     "socket.io": "^4.6.1",
-    "stripe": "^14.10.0"
+    "stripe": "^14.10.0",
+    "ua-parser-js": "^2.0.9"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
