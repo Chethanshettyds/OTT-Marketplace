@@ -22,13 +22,16 @@ type Step = 'amount' | 'method' | 'confirm';
 function nowLocalDatetime() {
   const d = new Date();
   d.setSeconds(0, 0);
-  return d.toISOString().slice(0, 16);
+  const offset = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - offset).toISOString().slice(0, 16);
 }
 
-// Returns the min allowed datetime (48h ago)
+// Returns the min allowed datetime (48h ago) — used as the min attr on the datetime input
 function minDatetime() {
   const d = new Date(Date.now() - 48 * 60 * 60 * 1000);
-  return d.toISOString().slice(0, 16);
+  // Convert to local time string for datetime-local input
+  const offset = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - offset).toISOString().slice(0, 16);
 }
 
 export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalProps) {
@@ -282,6 +285,7 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
                       type="datetime-local"
                       value={paymentDatetime}
                       onChange={(e) => setPaymentDatetime(e.target.value)}
+                      min={minDatetime()}
                       max={nowLocalDatetime()}
                       className="input-field text-sm"
                     />
