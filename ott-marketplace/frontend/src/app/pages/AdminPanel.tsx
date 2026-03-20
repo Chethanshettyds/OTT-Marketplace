@@ -88,6 +88,12 @@ export default function AdminPanel() {
   const [payForm, setPayForm] = useState<AddMethodForm>(EMPTY_FORM);
   const [paySaving, setPaySaving] = useState(false);
 
+  // ── Pending topup approvals ───────────────────────────────────────────────
+  const [pendingTopups, setPendingTopups] = useState<any[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const [rejectModal, setRejectModal] = useState<{ paymentId: string; userName: string; amount: number } | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+
   // ── Password & Security (Settings tab) ───────────────────────────────────────
   const { user: adminUser, setToken: setAdminToken } = useAuthStore();
   const [showCurPw, setShowCurPw] = useState(false);
@@ -178,7 +184,7 @@ export default function AdminPanel() {
     if (activeTab === 'Products') fetchProducts();
     else if (activeTab === 'Orders') fetchOrders();
     else if (activeTab === 'Users') fetchUsers();
-    else if (activeTab === 'Payments') fetchPayments();
+    else if (activeTab === 'Payments') { fetchPayments(); fetchPendingTopups(); }
     else if (activeTab === 'Tickets') fetchTickets();
     else if (activeTab === 'Settings') fetchPayMethods();
     else if (activeTab === 'Broadcast') fetchBroadcasts();
@@ -191,6 +197,40 @@ export default function AdminPanel() {
       setPayMethods(data.paymentMethods);
     } catch { toast.error('Failed to load payment methods'); }
     finally { setPayLoading(false); }
+  };
+
+  const fetchPendingTopups = async () => {
+    setPendingLoading(true);
+    try {
+      const { data } = await api.get('/wallet/pending-topups');
+      setPendingTopups(data.payments);
+    } catch { toast.error('Failed to load pending topups'); }
+    finally { setPendingLoading(false); }
+  };
+
+  const handleApproveTopup = async (paymentId: string) => {
+    try {
+      const { data } = await api.post(`/wallet/topup/${paymentId}/approve`);
+      toast.success(data.message);
+      setPendingTopups((prev) => prev.filter((p) => p._id !== paymentId));
+      fetchPayments(); // refresh full payments list
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Approval failed');
+    }
+  };
+
+  const handleRejectTopup = async () => {
+    if (!rejectModal) return;
+    try {
+      await api.post(`/wallet/topup/${rejectModal.paymentId}/reject`, { reason: rejectReason.trim() || 'Transaction ID could not be verified' });
+      toast.success('Payment rejected and user notified');
+      setPendingTopups((prev) => prev.filter((p) => p._id !== rejectModal.paymentId));
+      setRejectModal(null);
+      setRejectReason('');
+      fetchPayments();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Rejection failed');
+    }
   };
 
   const handleAddPayMethod = async () => {
@@ -833,7 +873,77 @@ export default function AdminPanel() {
             };
 
             return (
-              <div className="glass rounded-2xl p-6 border border-white/10">
+              <div className="space-y-5">
+                {/* ── Pending Topup Approvals ── */}
+                <div className="glass rounded-2xl border border-amber-500/20 overflow-hidden">
+                  <div className="flex items-center justify-between p-5 border-b border-white/10">
+                    <div className="flex items-center gap-2">
+                      <i className="pi pi-clock text-amber-400" />
+                      <h3 className="text-white font-semibold">Pending Wallet Top-ups</h3>
+                      {pendingTopups.length > 0 && (
+                        <span className="min-w-[22px] h-[22px] px-1.5 rounded-full text-xs font-bold flex items-center justify-center text-white bg-amber-500">
+                          {pendingTopups.length}
+                        </span>
+                      )}
+                    </div>
+                    <button onClick={fetchPendingTopups} className="text-white/40 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/5">
+                      <i className="pi pi-refresh text-sm" />
+                    </button>
+                  </div>
+                  {pendingLoading ? (
+                    <div className="flex items-center justify-center py-10 text-white/30">
+                      <i className="pi pi-spin pi-spinner text-xl mr-2" /> Loading…
+                    </div>
+                  ) : pendingTopups.length === 0 ? (
+                    <div className="text-center py-10 text-white/30">
+                      <i className="pi pi-check-circle text-3xl mb-2 block text-emerald-500/40" />
+                      <p className="text-sm">No pending top-ups — all clear</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-white/5">
+                      {pendingTopups.map((p) => (
+                        <div key={p._id} className="flex items-center gap-4 p-4 hover:bg-white/[0.03] transition-colors">
+                          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                            <span className="text-white text-xs font-bold">{p.user?.name?.[0]?.toUpperCase() || '?'}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-white font-semibold text-sm">{p.user?.name}</p>
+                              <span className="text-white/40 text-xs">{p.user?.email}</span>
+                            </div>
+                            <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                              <span className="text-emerald-400 font-bold text-sm">₹{p.amount?.toFixed(2)}</span>
+                              <span className="text-white/50 text-xs font-mono bg-white/5 px-2 py-0.5 rounded border border-white/10">
+                                Txn: {p.transactionId}
+                              </span>
+                              <span className="text-white/30 text-xs capitalize">{p.method}</span>
+                              {p.paymentTimestamp && (
+                                <span className="text-white/30 text-xs">
+                                  Paid: {new Date(p.paymentTimestamp).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <button
+                              onClick={() => handleApproveTopup(p._id)}
+                              className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/30 transition-colors font-semibold"
+                            >
+                              <i className="pi pi-check text-xs" /> Approve
+                            </button>
+                            <button
+                              onClick={() => { setRejectModal({ paymentId: p._id, userName: p.user?.name, amount: p.amount }); setRejectReason(''); }}
+                              className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-colors font-semibold"
+                            >
+                              <i className="pi pi-times text-xs" /> Reject
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 {/* Header */}
                 <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
                   <div>
@@ -1707,6 +1817,47 @@ export default function AdminPanel() {
               setEditUserTarget(updated);
             }}
           />
+        )}
+      </AnimatePresence>
+
+      {/* ── Reject Topup Modal ── */}
+      <AnimatePresence>
+        {rejectModal && (
+          <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setRejectModal(null)} />
+            <motion.div
+              className="relative glass rounded-2xl w-full max-w-sm border border-red-500/20 shadow-2xl p-6 space-y-4"
+              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
+                  <i className="pi pi-times-circle text-red-400 text-lg" />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold">Reject Top-up</h3>
+                  <p className="text-white/40 text-xs">₹{rejectModal.amount?.toFixed(2)} from {rejectModal.userName}</p>
+                </div>
+              </div>
+              <div>
+                <label className="text-white/60 text-sm block mb-2">Reason for rejection</label>
+                <textarea
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="e.g. Transaction ID not found in Paytm dashboard"
+                  rows={3}
+                  className="input-field text-sm resize-none w-full"
+                />
+                <p className="text-white/30 text-xs mt-1">This reason will be sent to the user via notification.</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setRejectModal(null)} className="btn-ghost flex-1 py-2.5 text-sm">Cancel</button>
+                <button onClick={handleRejectTopup} className="flex-1 py-2.5 text-sm rounded-xl font-semibold bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-colors">
+                  Reject &amp; Notify User
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

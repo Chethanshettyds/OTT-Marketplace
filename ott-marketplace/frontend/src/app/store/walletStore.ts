@@ -3,10 +3,12 @@ import api from '../utils/api';
 import { useAuthStore } from './authStore';
 
 interface TopupResult {
-  oldPayment: boolean;
+  pending: boolean;
+  oldPayment?: boolean;
   message: string;
   ticketNumber?: string;
   ticketId?: string;
+  paymentId?: string;
 }
 
 interface WalletState {
@@ -34,13 +36,16 @@ export const useWalletStore = create<WalletState>((set) => ({
     set({ isLoading: true });
     try {
       const { data } = await api.post('/wallet/topup', { amount, method, transactionId, paymentTimestamp });
-      if (data.oldPayment) {
-        set({ isLoading: false });
-        return { oldPayment: true, message: data.message, ticketNumber: data.ticketNumber, ticketId: data.ticketId };
-      }
-      set({ balance: data.balance, isLoading: false });
-      useAuthStore.getState().updateUser({ wallet: data.balance });
-      return { oldPayment: false, message: data.message };
+      // All topups are now pending — no immediate wallet credit
+      set({ isLoading: false });
+      return {
+        pending: true,
+        oldPayment: data.oldPayment || false,
+        message: data.message,
+        ticketNumber: data.ticketNumber,
+        ticketId: data.ticketId,
+        paymentId: data.paymentId,
+      };
     } catch (err: any) {
       set({ isLoading: false });
       throw new Error(err.response?.data?.error || 'Top-up failed');

@@ -101,7 +101,7 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
         toast(
           (t) => (
             <div className="flex flex-col gap-2">
-              <p className="font-semibold text-amber-300">Payment is older than 48 hours</p>
+              <p className="font-semibold text-amber-300">⏰ Payment older than 48 hours</p>
               <p className="text-sm text-white/80">{result.message}</p>
               <button
                 onClick={() => { toast.dismiss(t.id); onClose(); navigate('/tickets'); }}
@@ -111,11 +111,20 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
               </button>
             </div>
           ),
-          { duration: 10000, style: { background: '#1a1a2e', border: '1px solid rgba(245,158,11,0.3)' } }
+          { duration: 12000, style: { background: '#1a1a2e', border: '1px solid rgba(245,158,11,0.3)' } }
         );
         onClose();
       } else {
-        toast.success(result.message);
+        toast(
+          (t) => (
+            <div className="flex flex-col gap-1.5">
+              <p className="font-semibold text-blue-300">🕐 Request Submitted</p>
+              <p className="text-sm text-white/80">Your top-up of ₹{amount} is pending admin verification. You'll be notified once approved.</p>
+              <button onClick={() => toast.dismiss(t.id)} className="text-xs text-white/40 hover:text-white/60 mt-1">Dismiss</button>
+            </div>
+          ),
+          { duration: 10000, style: { background: '#1a1a2e', border: '1px solid rgba(99,102,241,0.3)' } }
+        );
         onClose();
       }
     } catch (err: any) {
@@ -279,9 +288,9 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 text-xs">
+                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs">
                     <i className="pi pi-info-circle mr-1" />
-                    Make the payment first, then fill in the details below. Only payments made within the last 48 hours are auto-credited.
+                    Make the payment first, then enter your Transaction ID below. Our team will verify and credit your wallet — usually within a few minutes.
                   </div>
 
                   {/* When did you pay? */}
