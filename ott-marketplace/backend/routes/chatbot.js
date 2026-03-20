@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { chat, getAnalytics, lookupOrder, createTicketFromChat } = require('../controllers/chatbotController');
+const { chat, getAnalytics, getDailyAnalytics, lookupOrder, createTicketFromChat } = require('../controllers/chatbotController');
 const { authJWT } = require('../middleware/authJWT');
 const adminGuard = require('../middleware/adminGuard');
 
@@ -15,5 +15,8 @@ router.post('/create-ticket', authJWT, createTicketFromChat);
 
 // GET /api/chatbot/analytics — admin only
 router.get('/analytics', authJWT, adminGuard, getAnalytics);
+
+// GET /api/chatbot/analytics/daily — admin only
+router.get('/analytics/daily', authJWT, adminGuard, getDailyAnalytics);
 
 module.exports = router;

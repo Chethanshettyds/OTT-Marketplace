@@ -9,13 +9,20 @@ const analytics = {
   recentQueries: [], // last 100
   escalations: 0,
   resolvedByBot: 0,
+  // Timestamped log for daily/period breakdowns
+  queryLog: [], // { topic, query, ts, resolved }
 };
 
 function trackQuery(topic, query) {
   analytics.totalQueries++;
   analytics.topTopics[topic] = (analytics.topTopics[topic] || 0) + 1;
-  analytics.recentQueries.unshift({ topic, query, ts: new Date() });
+  const entry = { topic, query, ts: new Date(), resolved: false };
+  analytics.recentQueries.unshift(entry);
+  analytics.queryLog.push(entry);
   if (analytics.recentQueries.length > 100) analytics.recentQueries.pop();
+  // Keep queryLog for 365 days max
+  const cutoff = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+  analytics.queryLog = analytics.queryLog.filter((e) => e.ts >= cutoff);
 }
 
 // Detect intent from user message
@@ -55,6 +62,9 @@ exports.lookupOrder = async (req, res) => {
 
     trackQuery('order_lookup', normalised);
     analytics.resolvedByBot++;
+    // Mark resolved in log
+    const last = [...analytics.queryLog].reverse().find((e) => e.query === normalised);
+    if (last) last.resolved = true;
 
     return res.json({
       found: true,
@@ -150,7 +160,11 @@ RESPONSE RULES:
   if (!groqKey && !geminiKey && !openaiKey) {
     const fallback = getFallbackResponse(intent, lastUserMsg);
     if (intent === 'escalation') analytics.escalations++;
-    else analytics.resolvedByBot++;
+    else {
+      analytics.resolvedByBot++;
+      const last = [...analytics.queryLog].reverse().find((e) => e.query === lastUserMsg);
+      if (last) last.resolved = true;
+    }
     return res.json({ reply: fallback, intent, fallback: true });
   }
 
@@ -223,7 +237,12 @@ RESPONSE RULES:
     }
 
     if (intent === 'escalation') analytics.escalations++;
-    else analytics.resolvedByBot++;
+    else {
+      analytics.resolvedByBot++;
+      // Mark the most recent log entry for this query as resolved
+      const last = [...analytics.queryLog].reverse().find((e) => e.query === lastUserMsg);
+      if (last) last.resolved = true;
+    }
 
     res.json({ reply, intent });
   } catch (err) {
@@ -289,6 +308,49 @@ exports.getAnalytics = async (req, res) => {
         : 0,
     topTopics: sorted,
     recentQueries: analytics.recentQueries.slice(0, 20),
+  });
+};
+
+// ── Daily Analytics (for chart + period summaries) ────────────────────────────
+exports.getDailyAnalytics = (req, res) => {
+  const now = new Date();
+
+  // Build last 7 days breakdown
+  const days7 = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+    const dayEnd   = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+    const entries  = analytics.queryLog.filter((e) => e.ts >= dayStart && e.ts <= dayEnd);
+    days7.push({
+      date: dayStart.toISOString().slice(0, 10),
+      label: dayStart.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }),
+      total: entries.length,
+      resolved: entries.filter((e) => e.resolved).length,
+      escalations: entries.filter((e) => e.topic === 'escalation').length,
+    });
+  }
+
+  // Period summaries helper
+  function periodStats(days) {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const entries = analytics.queryLog.filter((e) => e.ts >= since);
+    return {
+      total: entries.length,
+      resolved: entries.filter((e) => e.resolved).length,
+      escalations: entries.filter((e) => e.topic === 'escalation').length,
+      resolutionRate: entries.length > 0 ? Math.round((entries.filter((e) => e.resolved).length / entries.length) * 100) : 0,
+    };
+  }
+
+  res.json({
+    days7,
+    periods: {
+      last7:   periodStats(7),
+      last30:  periodStats(30),
+      last365: periodStats(365),
+    },
   });
 };
 
