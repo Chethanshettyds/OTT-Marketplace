@@ -13,7 +13,7 @@ interface WalletTopupModalProps {
 
 interface PaymentMethod {
   _id: string; type: string; label: string;
-  upiId: string; qrCodeUrl: string; accountDetails: string; isDefault: boolean;
+  upiId: string; merchantId?: string; qrCodeUrl: string; accountDetails: string; isDefault: boolean;
 }
 
 type Step = 'amount' | 'method' | 'confirm';
@@ -240,6 +240,12 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
                       <div className="flex items-center justify-between">
                         <span className="text-white/50 text-xs">UPI ID</span>
                         <span className="text-white font-mono text-sm">{selectedMethod.upiId}</span>
+                      </div>
+                    )}
+                    {selectedMethod?.merchantId && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-white/50 text-xs">Merchant ID</span>
+                        <span className="text-white font-mono text-sm">{selectedMethod.merchantId}</span>
                       </div>
                     )}
                     {selectedMethod?.accountDetails && (

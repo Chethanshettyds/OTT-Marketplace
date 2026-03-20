@@ -25,6 +25,7 @@ const paymentMethodSchema = new mongoose.Schema(
     },
     label: { type: String, required: true }, // display name e.g. "My Paytm"
     upiId: { type: String, default: '' },
+    merchantId: { type: String, default: '' }, // Paytm merchant ID
     qrCodeUrl: { type: String, default: '' },
     accountDetails: { type: String, default: '' },
     isDefault: { type: Boolean, default: false },

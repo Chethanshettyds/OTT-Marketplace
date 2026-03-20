@@ -142,7 +142,7 @@ exports.getPaymentMethods = async (req, res) => {
 
 exports.addPaymentMethod = async (req, res) => {
   try {
-    const { type, label, upiId, qrCodeUrl, accountDetails, isDefault } = req.body;
+    const { type, label, upiId, merchantId, qrCodeUrl, accountDetails, isDefault } = req.body;
     if (!type || !label) return res.status(400).json({ error: 'Type and label are required' });
 
     const admin = await User.findOne({ role: 'admin' });
@@ -152,7 +152,7 @@ exports.addPaymentMethod = async (req, res) => {
       admin.paymentMethods.forEach((m) => { m.isDefault = false; });
     }
 
-    admin.paymentMethods.push({ type, label, upiId, qrCodeUrl, accountDetails, isDefault: !!isDefault });
+    admin.paymentMethods.push({ type, label, upiId, merchantId: merchantId || '', qrCodeUrl, accountDetails, isDefault: !!isDefault });
     await admin.save({ validateBeforeSave: false });
 
     res.status(201).json({ paymentMethods: admin.paymentMethods });

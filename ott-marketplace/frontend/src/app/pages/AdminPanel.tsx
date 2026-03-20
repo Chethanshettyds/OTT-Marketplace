@@ -25,13 +25,13 @@ const TABS = ['Dashboard', 'Products', 'Orders', 'Users', 'Payments', 'Tickets',
 
 interface PaymentMethod {
   _id: string; type: string; label: string;
-  upiId: string; qrCodeUrl: string; accountDetails: string; isDefault: boolean;
+  upiId: string; merchantId: string; qrCodeUrl: string; accountDetails: string; isDefault: boolean;
 }
 interface AddMethodForm {
-  type: string; label: string; upiId: string;
+  type: string; label: string; upiId: string; merchantId: string;
   qrCodeUrl: string; accountDetails: string; isDefault: boolean;
 }
-const EMPTY_FORM: AddMethodForm = { type: '', label: '', upiId: '', qrCodeUrl: '', accountDetails: '', isDefault: false };
+const EMPTY_FORM: AddMethodForm = { type: '', label: '', upiId: '', merchantId: '', qrCodeUrl: '', accountDetails: '', isDefault: false };
 
 interface Product {
   _id: string; name: string; platform: string; category: string;
@@ -1272,6 +1272,21 @@ export default function AdminPanel() {
                                     </div>
                                   )}
 
+                                  {payForm.type === 'paytm' && (
+                                    <div>
+                                      <label className="text-white/60 text-xs block mb-1">
+                                        Paytm Merchant ID
+                                        <span className="text-white/30 ml-1">(from Paytm Business dashboard)</span>
+                                      </label>
+                                      <input
+                                        value={payForm.merchantId}
+                                        onChange={(e) => setPayForm((f) => ({ ...f, merchantId: e.target.value }))}
+                                        placeholder="e.g. ABCDE12345678901"
+                                        className="input-field text-sm font-mono"
+                                      />
+                                    </div>
+                                  )}
+
                                   <div>
                                     <label className="text-white/60 text-xs block mb-1">QR Code (optional)</label>
                                     {/* Upload */}
@@ -1394,6 +1409,7 @@ export default function AdminPanel() {
                               )}
                             </div>
                             {m.upiId && <p className="text-white/40 text-xs">{m.upiId}</p>}
+                            {(m as any).merchantId && <p className="text-white/40 text-xs">Merchant ID: <span className="font-mono">{(m as any).merchantId}</span></p>}
                             {m.qrCodeUrl && <p className="text-white/40 text-xs truncate">QR: {m.qrCodeUrl}</p>}
                             {m.accountDetails && <p className="text-white/40 text-xs truncate">{m.accountDetails}</p>}
                           </div>
