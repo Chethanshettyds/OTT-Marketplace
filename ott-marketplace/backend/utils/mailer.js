@@ -1,15 +1,9 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.NODEMAILER_USER,
-    pass: process.env.NODEMAILER_PASS,
-  },
-});
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
-if (process.env.NODEMAILER_USER && process.env.NODEMAILER_PASS) {
-  console.log('✅ Mailer ready (Nodemailer/Gmail)');
+if (resend) {
+  console.log('✅ Mailer ready (Resend)');
 } else {
   console.warn('⚠️  No mailer configured — emails will be skipped');
 }
@@ -18,17 +12,14 @@ if (process.env.NODEMAILER_USER && process.env.NODEMAILER_PASS) {
  * sendMail({ to, subject, html })
  */
 async function sendMail({ to, subject, html }) {
-  if (!process.env.NODEMAILER_USER || !process.env.NODEMAILER_PASS) {
+  if (!resend) {
     console.warn('⚠️  sendMail called but no mailer configured — skipping');
     return;
   }
 
-  await transporter.sendMail({
-    from: `"OTTMarket" <${process.env.NODEMAILER_USER}>`,
-    to,
-    subject,
-    html,
-  });
+  const from = process.env.RESEND_FROM || 'OTTMarket <onboarding@resend.dev>';
+  const { error } = await resend.emails.send({ from, to, subject, html });
+  if (error) throw new Error(error.message);
 }
 
 // ── Pre-built templates ───────────────────────────────────────────────────────
