@@ -1,9 +1,8 @@
-const { Resend } = require('resend');
+const sgMail = require('@sendgrid/mail');
 
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-
-if (resend) {
-  console.log('✅ Mailer ready (Resend)');
+if (process.env.SENDGRID_API_KEY) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+  console.log('✅ Mailer ready (SendGrid)');
 } else {
   console.warn('⚠️  No mailer configured — emails will be skipped');
 }
@@ -12,14 +11,17 @@ if (resend) {
  * sendMail({ to, subject, html })
  */
 async function sendMail({ to, subject, html }) {
-  if (!resend) {
+  if (!process.env.SENDGRID_API_KEY) {
     console.warn('⚠️  sendMail called but no mailer configured — skipping');
     return;
   }
 
-  const from = process.env.RESEND_FROM || 'OTTMarket <onboarding@resend.dev>';
-  const { error } = await resend.emails.send({ from, to, subject, html });
-  if (error) throw new Error(error.message);
+  await sgMail.send({
+    from: { name: 'OTTMarket', email: process.env.SENDGRID_FROM_EMAIL },
+    to,
+    subject,
+    html,
+  });
 }
 
 // ── Pre-built templates ───────────────────────────────────────────────────────
