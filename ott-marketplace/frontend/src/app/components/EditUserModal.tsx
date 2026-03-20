@@ -61,6 +61,14 @@ export default function EditUserModal({ user: initialUser, onClose, onUpdated }:
   const [showPw, setShowPw] = useState(false);
   const [resettingPw, setResettingPw] = useState(false);
 
+  // ── Fund wallet state ──────────────────────────────────────────────────────
+  const [fundAmount, setFundAmount] = useState('');
+  const [fundNote, setFundNote] = useState('');
+  const [funding, setFunding] = useState(false);
+
+  // ── Ban state ──────────────────────────────────────────────────────────────
+  const [togglingBan, setTogglingBan] = useState(false);
+
   // ── Sign-in history state ──────────────────────────────────────────────────
   const [sessions, setSessions] = useState<SigninSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
@@ -124,6 +132,42 @@ export default function EditUserModal({ user: initialUser, onClose, onUpdated }:
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Reset failed');
     } finally { setResettingPw(false); }
+  };
+
+  const handleFundWallet = async () => {
+    const parsed = parseFloat(fundAmount);
+    if (!parsed || parsed <= 0) { toast.error('Enter a valid amount'); return; }
+    setFunding(true);
+    try {
+      const { data } = await api.post(`/admin/users/${user._id}/fund`, {
+        amount: parsed, note: fundNote || 'Admin credit',
+      });
+      const updated = { ...user, wallet: data.newBalance, walletBalance: data.newBalance };
+      setUser(updated);
+      setWallet(String(data.newBalance));
+      onUpdated(updated);
+      setFundAmount('');
+      setFundNote('');
+      toast.success(data.message);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Fund failed');
+    } finally { setFunding(false); }
+  };
+
+  const handleToggleBan = async () => {
+    const action = user.isActive ? 'ban' : 'unban';
+    if (!confirm(`Are you sure you want to ${action} ${user.name}?`)) return;
+    setTogglingBan(true);
+    try {
+      const { data } = await api.put(`/admin/users/${user._id}/toggle`);
+      const updated = { ...user, isActive: data.user.isActive };
+      setUser(updated);
+      setIsActive(data.user.isActive);
+      onUpdated(updated);
+      toast.success(data.message);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Action failed');
+    } finally { setTogglingBan(false); }
   };
 
   const handleAddPayment = async () => {
@@ -312,6 +356,96 @@ export default function EditUserModal({ user: initialUser, onClose, onUpdated }:
                       style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
                       {resettingPw ? <i className="pi pi-spin pi-spinner text-xs" /> : <i className="pi pi-key text-xs" />}
                       Reset
+                    </button>
+                  </div>
+                </div>
+
+                {/* Fund Wallet */}
+                <div className="rounded-xl border border-emerald-500/20 p-5 space-y-4" style={{ background: 'rgba(16,185,129,0.04)' }}>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-white font-semibold text-sm flex items-center gap-2">
+                      <i className="pi pi-wallet text-emerald-400" /> Add Funds to Wallet
+                    </h3>
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-emerald-500/20" style={{ background: 'rgba(16,185,129,0.08)' }}>
+                      <span className="text-white/40 text-xs">Current balance</span>
+                      <span className="text-emerald-400 font-bold text-sm">₹{(user.walletBalance ?? user.wallet ?? 0).toFixed(2)}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm font-medium">₹</span>
+                      <input
+                        type="number" min="1" step="0.01"
+                        value={fundAmount}
+                        onChange={(e) => setFundAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full pl-7 pr-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-sm focus:outline-none focus:border-emerald-500/60 transition-colors"
+                      />
+                    </div>
+                    <input
+                      value={fundNote}
+                      onChange={(e) => setFundNote(e.target.value)}
+                      placeholder="Note (optional)"
+                      className="flex-1 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-sm focus:outline-none focus:border-emerald-500/60 transition-colors"
+                    />
+                    <button onClick={handleFundWallet} disabled={funding || !fundAmount}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-40 whitespace-nowrap"
+                      style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
+                      {funding ? <i className="pi pi-spin pi-spinner text-xs" /> : <i className="pi pi-plus text-xs" />}
+                      Add Funds
+                    </button>
+                  </div>
+                  {/* Quick amounts */}
+                  <div className="flex gap-2 flex-wrap">
+                    {[50, 100, 200, 500, 1000].map((amt) => (
+                      <button key={amt} onClick={() => setFundAmount(String(amt))}
+                        className={`px-3 py-1 rounded-lg text-xs font-medium border transition-all ${
+                          fundAmount === String(amt)
+                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                            : 'bg-white/5 text-white/40 border-white/10 hover:border-white/20 hover:text-white/60'
+                        }`}>
+                        ₹{amt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Account Control — Ban / Unban */}
+                <div className={`rounded-xl border p-5 space-y-3 ${user.isActive ? 'border-red-500/20' : 'border-emerald-500/20'}`}
+                  style={{ background: user.isActive ? 'rgba(239,68,68,0.04)' : 'rgba(16,185,129,0.04)' }}>
+                  <h3 className="text-white font-semibold text-sm flex items-center gap-2">
+                    <i className={`pi ${user.isActive ? 'pi-ban text-red-400' : 'pi-check-circle text-emerald-400'}`} />
+                    Account Control
+                  </h3>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-white/60 text-sm">
+                        {user.isActive
+                          ? 'This account is currently active. Banning will prevent the user from logging in.'
+                          : 'This account is currently banned. Unbanning will restore full access.'}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                          user.isActive
+                            ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                            : 'bg-red-500/15 text-red-400 border-red-500/30'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${user.isActive ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
+                          {user.isActive ? 'Active' : 'Banned'}
+                        </span>
+                      </div>
+                    </div>
+                    <button onClick={handleToggleBan} disabled={togglingBan}
+                      className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-50 ${
+                        user.isActive
+                          ? 'hover:opacity-90'
+                          : 'hover:opacity-90'
+                      }`}
+                      style={{ background: user.isActive ? 'linear-gradient(135deg, #ef4444, #dc2626)' : 'linear-gradient(135deg, #10b981, #059669)' }}>
+                      {togglingBan
+                        ? <i className="pi pi-spin pi-spinner text-xs" />
+                        : <i className={`pi ${user.isActive ? 'pi-ban' : 'pi-check'} text-xs`} />}
+                      {user.isActive ? 'Ban User' : 'Unban User'}
                     </button>
                   </div>
                 </div>

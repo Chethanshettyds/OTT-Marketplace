@@ -783,21 +783,12 @@ export default function AdminPanel() {
                                 <td className="px-4 py-3.5">
                                   <div className="flex gap-1.5">
                                     <button onClick={() => setEditUserTarget(r)}
-                                      className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 rounded-lg transition-colors font-medium"
+                                      className="flex items-center gap-1 text-xs px-3 py-1.5 bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 rounded-lg transition-colors font-medium border border-indigo-500/20"
                                       title="Edit user">
                                       <i className="pi pi-pencil text-xs" /> Edit
                                     </button>
-                                    <button onClick={() => setFundTarget(r)}
-                                      className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-lg transition-colors font-medium"
-                                      title="Add funds">
-                                      💰 Fund
-                                    </button>
-                                    <button onClick={() => handleToggleUser(r._id)}
-                                      className={`text-xs px-2 py-1 rounded-lg transition-colors ${r.isActive ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'}`}>
-                                      {r.isActive ? 'Ban' : 'Unban'}
-                                    </button>
                                     <button onClick={() => handleDeleteUser(r._id, r.name)}
-                                      className="text-xs px-2 py-1 rounded-lg bg-rose-900/30 text-rose-400 hover:bg-rose-500/30 transition-colors"
+                                      className="text-xs px-2 py-1.5 rounded-lg bg-rose-900/30 text-rose-400 hover:bg-rose-500/30 transition-colors border border-rose-500/20"
                                       title="Delete user">
                                       <i className="pi pi-trash text-xs" />
                                     </button>
