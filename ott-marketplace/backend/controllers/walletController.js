@@ -263,12 +263,12 @@ exports.getAllPayments = async (req, res) => {
 // ── Cashfree Payment Gateway ──────────────────────────────────────────────────
 const { Cashfree } = require('cashfree-pg');
 
-// Configure Cashfree SDK
+// Configure Cashfree SDK (v5+ uses string constants directly)
 Cashfree.XClientId = process.env.CASHFREE_APP_ID;
 Cashfree.XClientSecret = process.env.CASHFREE_SECRET_KEY;
 Cashfree.XEnvironment = process.env.CASHFREE_ENV === 'production'
-  ? Cashfree.Environment.PRODUCTION
-  : Cashfree.Environment.SANDBOX;
+  ? 'production'
+  : 'sandbox';
 
 // Create a Cashfree order and return the payment session ID
 exports.createCashfreeOrder = async (req, res) => {
