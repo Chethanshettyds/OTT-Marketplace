@@ -4,6 +4,7 @@ import { useWallet } from '../hooks/useWallet';
 import { PAYMENT_TYPES } from '../utils/paymentTypes';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 
 interface WalletTopupModalProps {
   isOpen: boolean;
@@ -17,17 +18,39 @@ interface PaymentMethod {
 
 type Step = 'amount' | 'method' | 'confirm';
 
+// Returns a datetime-local string for "now" in local time
+function nowLocalDatetime() {
+  const d = new Date();
+  d.setSeconds(0, 0);
+  return d.toISOString().slice(0, 16);
+}
+
+// Returns the min allowed datetime (48h ago)
+function minDatetime() {
+  const d = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  return d.toISOString().slice(0, 16);
+}
+
 export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalProps) {
   const [step, setStep] = useState<Step>('amount');
   const [amount, setAmount] = useState('');
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
   const [txnId, setTxnId] = useState('');
+  const [paymentDatetime, setPaymentDatetime] = useState(nowLocalDatetime());
   const [loadingMethods, setLoadingMethods] = useState(false);
   const { balance, topup, isLoading } = useWallet();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    if (isOpen) { fetchMethods(); setStep('amount'); setAmount(''); setTxnId(''); setSelectedMethod(null); }
+    if (isOpen) {
+      fetchMethods();
+      setStep('amount');
+      setAmount('');
+      setTxnId('');
+      setSelectedMethod(null);
+      setPaymentDatetime(nowLocalDatetime());
+    }
   }, [isOpen]);
 
   const fetchMethods = async () => {
@@ -44,6 +67,7 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
   const handleAmountNext = () => {
     const val = parseFloat(amount);
     if (!val || val <= 0) return toast.error('Enter a valid amount');
+    if (val < 1) return toast.error('Minimum top-up is ₹1');
     setStep('method');
   };
 
@@ -54,16 +78,50 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
 
   const handleSubmit = async () => {
     if (!txnId.trim()) return toast.error('Enter the transaction ID');
+    if (txnId.trim().replace(/[^a-zA-Z0-9\-_]/g, '').length < 6) {
+      return toast.error('Transaction ID must be at least 6 alphanumeric characters');
+    }
+    if (!paymentDatetime) return toast.error('Select when you made the payment');
+
+    const paymentTime = new Date(paymentDatetime);
+    if (paymentTime > new Date()) return toast.error('Payment time cannot be in the future');
+
     try {
-      const msg = await topup(parseFloat(amount), selectedMethod!.type, txnId.trim());
-      toast.success(msg);
-      onClose();
+      const result = await topup(
+        parseFloat(amount),
+        selectedMethod!.type,
+        txnId.trim(),
+        paymentTime.toISOString(),
+      );
+
+      if (result.oldPayment) {
+        toast(
+          (t) => (
+            <div className="flex flex-col gap-2">
+              <p className="font-semibold text-amber-300">Payment is older than 48 hours</p>
+              <p className="text-sm text-white/80">{result.message}</p>
+              <button
+                onClick={() => { toast.dismiss(t.id); onClose(); navigate('/tickets'); }}
+                className="text-xs bg-amber-500/20 border border-amber-500/40 text-amber-300 px-3 py-1.5 rounded-lg hover:bg-amber-500/30 transition-colors"
+              >
+                View Ticket {result.ticketNumber}
+              </button>
+            </div>
+          ),
+          { duration: 10000, style: { background: '#1a1a2e', border: '1px solid rgba(245,158,11,0.3)' } }
+        );
+        onClose();
+      } else {
+        toast.success(result.message);
+        onClose();
+      }
     } catch (err: any) {
       toast.error(err.message);
     }
   };
 
   const pt = PAYMENT_TYPES.find((p) => p.value === selectedMethod?.type);
+  const isPaytm = selectedMethod?.type === 'paytm';
 
   return (
     <AnimatePresence>
@@ -113,7 +171,6 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
                       className="input-field pl-9 text-xl font-bold"
                     />
                   </div>
-                  {/* Quick amounts */}
                   <div className="grid grid-cols-4 gap-2">
                     {[100, 250, 500, 1000].map((a) => (
                       <button key={a} onClick={() => setAmount(String(a))}
@@ -167,7 +224,7 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
                 </motion.div>
               )}
 
-              {/* Step 3: Confirm + TxnID */}
+              {/* Step 3: Confirm + TxnID + Payment Time */}
               {step === 'confirm' && (
                 <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
                   {/* Payment instructions */}
@@ -193,7 +250,10 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
                     )}
                     {selectedMethod?.qrCodeUrl && (
                       <div className="text-center pt-2">
-                        <img src={selectedMethod.qrCodeUrl} alt="QR Code" className="w-32 h-32 mx-auto rounded-lg object-contain bg-white p-1" />
+                        <img src={selectedMethod.qrCodeUrl} alt="QR Code" className="w-36 h-36 mx-auto rounded-lg object-contain bg-white p-1" />
+                        {isPaytm && (
+                          <p className="text-white/40 text-xs mt-1">Scan with Paytm / any UPI app</p>
+                        )}
                       </div>
                     )}
                     <div className="flex items-center justify-between pt-2 border-t border-white/10">
@@ -204,7 +264,24 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
 
                   <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 text-xs">
                     <i className="pi pi-info-circle mr-1" />
-                    Make the payment using the details above, then enter the transaction ID below.
+                    Make the payment first, then fill in the details below. Only payments made within the last 48 hours are auto-credited.
+                  </div>
+
+                  {/* When did you pay? */}
+                  <div>
+                    <label className="text-white/60 text-sm block mb-2">
+                      When did you make the payment? *
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={paymentDatetime}
+                      onChange={(e) => setPaymentDatetime(e.target.value)}
+                      max={nowLocalDatetime()}
+                      className="input-field text-sm"
+                    />
+                    <p className="text-white/30 text-xs mt-1">
+                      Payments older than 48 hours will be reviewed by our team.
+                    </p>
                   </div>
 
                   <div>
@@ -215,6 +292,9 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
                       placeholder="e.g. 123456789012"
                       className="input-field"
                     />
+                    <p className="text-white/30 text-xs mt-1">
+                      Find this in your Paytm / UPI app under payment history.
+                    </p>
                   </div>
 
                   <div className="flex gap-2">

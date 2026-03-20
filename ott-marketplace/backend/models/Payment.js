@@ -22,6 +22,8 @@ const paymentSchema = new mongoose.Schema(
     // For manual topup verification
     screenshotUrl: { type: String, default: '' },
     verifiedByAdmin: { type: Boolean, default: false },
+    // When the user claims the payment was made (for 48hr validation)
+    paymentTimestamp: { type: Date, default: null },
   },
   { timestamps: true }
 );

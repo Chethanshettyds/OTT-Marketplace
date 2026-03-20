@@ -1,5 +1,7 @@
 const User = require('../models/User');
 const Payment = require('../models/Payment');
+const Ticket = require('../models/Ticket');
+const Notification = require('../models/Notification');
 
 // ── Balance ──────────────────────────────────────────────────────────────────
 exports.getBalance = async (req, res) => {
@@ -9,7 +11,7 @@ exports.getBalance = async (req, res) => {
 // ── Manual Topup (any amount + transaction ID) ────────────────────────────────
 exports.topup = async (req, res) => {
   try {
-    const { amount, method, transactionId, note } = req.body;
+    const { amount, method, transactionId, note, paymentTimestamp } = req.body;
     const parsed = parseFloat(amount);
     if (!parsed || parsed <= 0) {
       return res.status(400).json({ error: 'Enter a valid amount greater than 0' });
@@ -18,12 +20,87 @@ exports.topup = async (req, res) => {
       return res.status(400).json({ error: 'Transaction ID is required' });
     }
 
-    // Check duplicate transaction ID
-    const existing = await Payment.findOne({ transactionId: transactionId.trim(), type: 'topup' });
+    // Sanitize transaction ID — alphanumeric only to prevent injection
+    const cleanTxnId = transactionId.trim().replace(/[^a-zA-Z0-9\-_]/g, '');
+    if (cleanTxnId.length < 6) {
+      return res.status(400).json({ error: 'Transaction ID must be at least 6 characters' });
+    }
+
+    // Check duplicate transaction ID (anti-spam: one txn ID can only be used once globally)
+    const existing = await Payment.findOne({ transactionId: cleanTxnId, type: 'topup' });
     if (existing) {
       return res.status(409).json({ error: 'This transaction ID has already been used' });
     }
 
+    // Rate limit: max 5 topup attempts per user per hour
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const recentAttempts = await Payment.countDocuments({
+      user: req.user._id,
+      type: 'topup',
+      createdAt: { $gte: oneHourAgo },
+    });
+    if (recentAttempts >= 5) {
+      return res.status(429).json({ error: 'Too many topup attempts. Please wait before trying again.' });
+    }
+
+    // ── 48-hour check ──────────────────────────────────────────────────────────
+    // paymentTimestamp is when the user claims they made the payment
+    const paymentTime = paymentTimestamp ? new Date(paymentTimestamp) : null;
+    const now = new Date();
+    const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+    // Reject future-dated timestamps (anti-fraud)
+    if (paymentTime && paymentTime > now) {
+      return res.status(400).json({ error: 'Payment timestamp cannot be in the future' });
+    }
+
+    if (paymentTime && paymentTime < fortyEightHoursAgo) {
+      // Payment is older than 48 hours — create a ticket and notify user
+      const ticket = await Ticket.create({
+        user: req.user._id,
+        subject: `Old Payment Verification — ₹${parsed} (Txn: ${cleanTxnId})`,
+        category: 'Payment',
+        priority: 'medium',
+        messages: [{
+          sender: req.user._id,
+          senderName: req.user.name,
+          senderRole: 'user',
+          content: `I made a payment of ₹${parsed} via ${method || 'UPI/Paytm'} on ${paymentTime.toLocaleString('en-IN')}.\n\nTransaction ID: ${cleanTxnId}\n\nPlease verify and credit my wallet.`,
+        }],
+      });
+
+      // Save a pending payment record for admin reference
+      await Payment.create({
+        user: req.user._id,
+        amount: parsed,
+        method: method || 'paytm',
+        status: 'pending',
+        type: 'topup',
+        transactionId: cleanTxnId,
+        paymentTimestamp: paymentTime,
+        note: `Old payment (>48h) — awaiting admin verification. Ticket: ${ticket.ticketNumber}`,
+      });
+
+      // Notify the user
+      await Notification.create({
+        userId: req.user._id,
+        type: 'wallet_topup',
+        ticketId: ticket._id,
+        data: {
+          title: 'Payment Too Old',
+          message: `Your payment of ₹${parsed} is older than 48 hours. A support ticket (${ticket.ticketNumber}) has been created. Our team will verify and credit your wallet.`,
+        },
+      });
+
+      return res.status(202).json({
+        oldPayment: true,
+        ticketNumber: ticket.ticketNumber,
+        ticketId: ticket._id,
+        message: `Your payment is older than 48 hours. A ticket (${ticket.ticketNumber}) has been created — our team will verify and credit your wallet shortly.`,
+      });
+    }
+
+    // ── Normal topup (within 48 hours) ────────────────────────────────────────
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { $inc: { wallet: parsed } },
@@ -33,11 +110,12 @@ exports.topup = async (req, res) => {
     await Payment.create({
       user: req.user._id,
       amount: parsed,
-      method: method || 'other',
+      method: method || 'paytm',
       status: 'completed',
       type: 'topup',
-      transactionId: transactionId.trim(),
-      note: note || `Wallet top-up of ₹${parsed} via ${method || 'manual'}`,
+      transactionId: cleanTxnId,
+      paymentTimestamp: paymentTime || now,
+      note: note || `Wallet top-up of ₹${parsed} via ${method || 'Paytm'}`,
     });
 
     res.json({ balance: user.wallet, message: `₹${parsed} added to wallet successfully` });
