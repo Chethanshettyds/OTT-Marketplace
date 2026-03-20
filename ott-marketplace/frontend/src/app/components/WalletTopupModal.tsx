@@ -124,7 +124,8 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
   };
 
   const pt = PAYMENT_TYPES.find((p) => p.value === selectedMethod?.type);
-  const isPaytm = selectedMethod?.type === 'paytm';
+  const isPaytmBusiness = selectedMethod?.type === 'paytm_business';
+  const isPaytm = selectedMethod?.type === 'paytm' || isPaytmBusiness;
 
   return (
     <AnimatePresence>
@@ -247,8 +248,13 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
                     )}
                     {selectedMethod?.merchantId && (
                       <div className="flex items-center justify-between">
-                        <span className="text-white/50 text-xs">Merchant ID</span>
+                        <span className="text-white/50 text-xs">{isPaytmBusiness ? 'Merchant ID' : 'Merchant ID'}</span>
                         <span className="text-white font-mono text-sm">{selectedMethod.merchantId}</span>
+                      </div>
+                    )}
+                    {isPaytmBusiness && !selectedMethod?.merchantId && (
+                      <div className="p-2 rounded bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 text-xs">
+                        No Merchant ID set — contact admin.
                       </div>
                     )}
                     {selectedMethod?.accountDetails && (
@@ -261,7 +267,9 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
                       <div className="text-center pt-2">
                         <img src={selectedMethod.qrCodeUrl} alt="QR Code" className="w-36 h-36 mx-auto rounded-lg object-contain bg-white p-1" />
                         {isPaytm && (
-                          <p className="text-white/40 text-xs mt-1">Scan with Paytm / any UPI app</p>
+                          <p className="text-white/40 text-xs mt-1">
+                            {isPaytmBusiness ? 'Scan with any UPI app — pay to Paytm Business' : 'Scan with Paytm / any UPI app'}
+                          </p>
                         )}
                       </div>
                     )}

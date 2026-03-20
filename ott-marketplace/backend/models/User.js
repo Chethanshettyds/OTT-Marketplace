@@ -20,7 +20,7 @@ const paymentMethodSchema = new mongoose.Schema(
   {
     type: {
       type: String,
-      enum: ['paytm', 'phonepe', 'gpay', 'bharatpe', 'binance', 'upi', 'bank', 'other'],
+      enum: ['paytm', 'paytm_business', 'phonepe', 'gpay', 'bharatpe', 'binance', 'bank', 'other'],
       required: true,
     },
     label: { type: String, required: true }, // display name e.g. "My Paytm"

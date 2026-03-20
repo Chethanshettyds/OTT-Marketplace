@@ -65,7 +65,7 @@ exports.topup = async (req, res) => {
           sender: req.user._id,
           senderName: req.user.name,
           senderRole: 'user',
-          content: `I made a payment of ₹${parsed} via ${method || 'UPI/Paytm'} on ${paymentTime.toLocaleString('en-IN')}.\n\nTransaction ID: ${cleanTxnId}\n\nPlease verify and credit my wallet.`,
+          content: `I made a payment of ₹${parsed} via ${method || 'Paytm Business QR'} on ${paymentTime.toLocaleString('en-IN')}.\n\nTransaction ID: ${cleanTxnId}\n\nPlease verify and credit my wallet.`,
         }],
       });
 
@@ -73,7 +73,7 @@ exports.topup = async (req, res) => {
       await Payment.create({
         user: req.user._id,
         amount: parsed,
-        method: method || 'paytm',
+        method: method || 'paytm_business',
         status: 'pending',
         type: 'topup',
         transactionId: cleanTxnId,
@@ -110,12 +110,12 @@ exports.topup = async (req, res) => {
     await Payment.create({
       user: req.user._id,
       amount: parsed,
-      method: method || 'paytm',
+      method: method || 'paytm_business',
       status: 'completed',
       type: 'topup',
       transactionId: cleanTxnId,
       paymentTimestamp: paymentTime || now,
-      note: note || `Wallet top-up of ₹${parsed} via ${method || 'Paytm'}`,
+      note: note || `Wallet top-up of ₹${parsed} via ${method || 'Paytm Business'}`,
     });
 
     res.json({ balance: user.wallet, message: `₹${parsed} added to wallet successfully` });

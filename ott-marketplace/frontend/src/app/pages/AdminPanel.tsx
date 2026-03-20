@@ -196,6 +196,9 @@ export default function AdminPanel() {
   const handleAddPayMethod = async () => {
     if (!payForm.type) return toast.error('Select a payment type');
     if (!payForm.label.trim()) return toast.error('Enter a label');
+    if (payForm.type === 'paytm_business' && !payForm.merchantId.trim()) {
+      return toast.error('Paytm Business Merchant ID is required');
+    }
     setPaySaving(true);
     try {
       const { data } = await api.post('/wallet/payment-methods', payForm);
@@ -1260,7 +1263,7 @@ export default function AdminPanel() {
                                     />
                                   </div>
 
-                                  {['paytm', 'phonepe', 'gpay', 'bharatpe', 'upi'].includes(payForm.type) && (
+                                  {['paytm', 'phonepe', 'gpay', 'bharatpe'].includes(payForm.type) && (
                                     <div>
                                       <label className="text-white/60 text-xs block mb-1">UPI ID</label>
                                       <input
@@ -1284,6 +1287,30 @@ export default function AdminPanel() {
                                         placeholder="e.g. ABCDE12345678901"
                                         className="input-field text-sm font-mono"
                                       />
+                                    </div>
+                                  )}
+
+                                  {payForm.type === 'paytm_business' && (
+                                    <div className="space-y-3">
+                                      <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs">
+                                        <i className="pi pi-info-circle mr-1" />
+                                        Paytm Business QR — users scan your QR and pay. Enter your Merchant ID so payments can be verified.
+                                      </div>
+                                      <div>
+                                        <label className="text-white/60 text-xs block mb-1">
+                                          Paytm Business Merchant ID *
+                                          <span className="text-white/30 ml-1">(from Paytm for Business dashboard)</span>
+                                        </label>
+                                        <input
+                                          value={payForm.merchantId}
+                                          onChange={(e) => setPayForm((f) => ({ ...f, merchantId: e.target.value.trim() }))}
+                                          placeholder="e.g. ABCDE12345678901"
+                                          className="input-field text-sm font-mono"
+                                        />
+                                        <p className="text-white/30 text-xs mt-1">
+                                          Find this in Paytm for Business → Settings → Business Profile
+                                        </p>
+                                      </div>
                                     </div>
                                   )}
 
