@@ -1,7 +1,13 @@
 import axios from 'axios';
 
+// Use VITE_API_URL for local dev (e.g. http://localhost:5000).
+// In production on Netlify, VITE_API_URL should NOT be set — requests go to /api
+// which netlify.toml proxies to the Render backend.
+const apiUrl = import.meta.env.VITE_API_URL;
+const baseURL = apiUrl ? `${apiUrl}/api` : '/api';
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api',
+  baseURL,
   timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
 });
