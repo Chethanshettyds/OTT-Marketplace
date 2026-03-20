@@ -6,6 +6,11 @@ const { isAdmin } = require('../middleware/authJWT');
 router.get('/balance', authJWT, ctrl.getBalance);
 router.post('/topup', authJWT, ctrl.topup);
 
+// Cashfree payment gateway
+router.post('/cashfree/create-order', authJWT, ctrl.createCashfreeOrder);
+router.post('/cashfree/verify', authJWT, ctrl.verifyCashfreePayment);
+router.post('/cashfree/webhook', ctrl.cashfreeWebhook); // no auth — Cashfree calls this
+
 // Admin topup approval
 router.get('/pending-topups', authJWT, isAdmin, ctrl.getPendingTopups);
 router.post('/topup/:paymentId/approve', authJWT, isAdmin, ctrl.approveTopup);

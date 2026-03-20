@@ -5,7 +5,7 @@ const paymentSchema = new mongoose.Schema(
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', default: null },
     amount: { type: Number, required: true },
-    method: { type: String, default: 'wallet' }, // wallet | paytm | phonepe | gpay | bharatpe | binance | upi | bank | other
+    method: { type: String, default: 'wallet' }, // wallet | paytm | phonepe | gpay | bharatpe | cashfree | upi | bank | other
     status: {
       type: String,
       enum: ['pending', 'completed', 'failed', 'refunded'],

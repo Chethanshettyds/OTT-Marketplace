@@ -29,7 +29,7 @@ interface Props {
 const TABS = ['Profile', 'Sign-in History', 'Payments'] as const;
 type Tab = typeof TABS[number];
 
-const PAYMENT_METHODS = ['wallet', 'admin', 'upi', 'paytm', 'phonepe', 'gpay', 'bharatpe', 'binance', 'bank', 'other'];
+const PAYMENT_METHODS = ['wallet', 'admin', 'upi', 'paytm', 'phonepe', 'gpay', 'bharatpe', 'cashfree', 'bank', 'other'];
 const PAYMENT_TYPES = ['topup', 'purchase', 'refund'];
 const PAYMENT_STATUSES = ['completed', 'pending', 'failed', 'refunded'];
 

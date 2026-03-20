@@ -1472,13 +1472,13 @@ export default function AdminPanel() {
                                     )}
                                   </div>
 
-                                  {['bank', 'binance', 'other'].includes(payForm.type) && (
+                                  {['bank', 'cashfree', 'other'].includes(payForm.type) && (
                                     <div>
                                       <label className="text-white/60 text-xs block mb-1">Account Details</label>
                                       <textarea
                                         value={payForm.accountDetails}
                                         onChange={(e) => setPayForm((f) => ({ ...f, accountDetails: e.target.value }))}
-                                        placeholder={payForm.type === 'binance' ? 'Binance Pay ID or wallet address' : 'Account number, IFSC, etc.'}
+                                        placeholder={payForm.type === 'cashfree' ? 'Cashfree merchant info or notes' : 'Account number, IFSC, etc.'}
                                         rows={3}
                                         className="input-field text-sm resize-none"
                                       />

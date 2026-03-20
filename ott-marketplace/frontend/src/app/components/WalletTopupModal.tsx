@@ -42,6 +42,7 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
   const [txnId, setTxnId] = useState('');
   const [paymentDatetime, setPaymentDatetime] = useState(nowLocalDatetime());
   const [loadingMethods, setLoadingMethods] = useState(false);
+  const [cashfreeLoading, setCashfreeLoading] = useState(false);
   const { balance, topup, isLoading } = useWallet();
   const navigate = useNavigate();
 
@@ -77,6 +78,51 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
   const handleMethodNext = () => {
     if (!selectedMethod) return toast.error('Select a payment method');
     setStep('confirm');
+  };
+
+  const handleCashfreePayment = async () => {
+    setCashfreeLoading(true);
+    try {
+      const { data } = await api.post('/wallet/cashfree/create-order', { amount: parseFloat(amount) });
+      const { payment_session_id, order_id } = data;
+
+      // Load Cashfree JS SDK dynamically
+      const cashfree = await new Promise<any>((resolve, reject) => {
+        if ((window as any).Cashfree) {
+          resolve((window as any).Cashfree({ mode: import.meta.env.VITE_CASHFREE_ENV === 'production' ? 'production' : 'sandbox' }));
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+        script.onload = () => resolve((window as any).Cashfree({ mode: import.meta.env.VITE_CASHFREE_ENV === 'production' ? 'production' : 'sandbox' }));
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+
+      const checkoutOptions = {
+        paymentSessionId: payment_session_id,
+        redirectTarget: '_modal',
+      };
+
+      const result = await cashfree.checkout(checkoutOptions);
+
+      if (result.error) {
+        toast.error(result.error.message || 'Payment failed');
+        return;
+      }
+
+      if (result.paymentDetails?.paymentMessage === 'Payment successful') {
+        // Verify on backend
+        const verifyRes = await api.post('/wallet/cashfree/verify', { order_id });
+        toast.success(`₹${amount} added to your wallet!`);
+        onClose();
+        navigate('/dashboard');
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Payment failed. Please try again.');
+    } finally {
+      setCashfreeLoading(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -221,6 +267,7 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
                             <div className="flex-1 min-w-0">
                               <p className="text-white text-sm font-medium">{m.label}</p>
                               {m.upiId && <p className="text-white/40 text-xs">{m.upiId}</p>}
+                              {m.type === 'cashfree' && <p className="text-green-400 text-xs font-medium">⚡ Instant credit</p>}
                             </div>
                             {selectedMethod?._id === m._id && <i className="pi pi-check text-indigo-400 text-sm" />}
                           </button>
@@ -240,6 +287,42 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
               {/* Step 3: Confirm + TxnID + Payment Time */}
               {step === 'confirm' && (
                 <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
+                  {/* Cashfree — instant payment */}
+                  {selectedMethod?.type === 'cashfree' ? (
+                    <>
+                      <div className="p-4 rounded-xl border border-green-500/20 bg-green-500/5 space-y-3">
+                        <div className="flex items-center gap-3">
+                          <span className="text-3xl">💚</span>
+                          <div>
+                            <p className="text-white font-semibold">Pay via Cashfree</p>
+                            <p className="text-white/40 text-xs">UPI · Cards · NetBanking · Wallets</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between border-t border-white/10 pt-3">
+                          <span className="text-white/50 text-sm">Amount</span>
+                          <span className="text-white font-black text-xl">₹{amount}</span>
+                        </div>
+                      </div>
+                      <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs">
+                        <i className="pi pi-info-circle mr-1" />
+                        You'll be redirected to Cashfree's secure payment page. Your wallet will be credited instantly after payment.
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => setStep('method')} className="btn-ghost flex-1 py-2.5">Back</button>
+                        <button
+                          onClick={handleCashfreePayment}
+                          disabled={cashfreeLoading}
+                          className="flex-1 py-2.5 rounded-xl font-bold text-white flex items-center justify-center gap-2 disabled:opacity-50 transition-all"
+                          style={{ background: 'linear-gradient(135deg, #00C853, #00897B)' }}
+                        >
+                          {cashfreeLoading
+                            ? <><i className="pi pi-spin pi-spinner" /> Processing...</>
+                            : <><i className="pi pi-external-link" /> Pay ₹{amount}</>}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
                   {/* Payment instructions */}
                   <div className="p-4 rounded-xl border border-white/10 bg-white/5 space-y-2">
                     <div className="flex items-center gap-2 mb-3">
@@ -330,6 +413,8 @@ export default function WalletTopupModal({ isOpen, onClose }: WalletTopupModalPr
                       {isLoading ? <><i className="pi pi-spin pi-spinner mr-2" />Processing...</> : <><i className="pi pi-check mr-2" />Confirm ₹{amount}</>}
                     </button>
                   </div>
+                  </>
+                  )}
                 </motion.div>
               )}
             </div>

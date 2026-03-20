@@ -259,3 +259,164 @@ exports.getAllPayments = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+// ── Cashfree Payment Gateway ──────────────────────────────────────────────────
+const { Cashfree } = require('cashfree-pg');
+
+// Configure Cashfree SDK
+Cashfree.XClientId = process.env.CASHFREE_APP_ID;
+Cashfree.XClientSecret = process.env.CASHFREE_SECRET_KEY;
+Cashfree.XEnvironment = process.env.CASHFREE_ENV === 'production'
+  ? Cashfree.Environment.PRODUCTION
+  : Cashfree.Environment.SANDBOX;
+
+// Create a Cashfree order and return the payment session ID
+exports.createCashfreeOrder = async (req, res) => {
+  try {
+    const { amount } = req.body;
+    const parsed = parseFloat(amount);
+    if (!parsed || parsed <= 0) {
+      return res.status(400).json({ error: 'Enter a valid amount greater than 0' });
+    }
+
+    const orderId = `WALLET_${req.user._id}_${Date.now()}`;
+
+    const orderRequest = {
+      order_id: orderId,
+      order_amount: parsed,
+      order_currency: 'INR',
+      customer_details: {
+        customer_id: req.user._id.toString(),
+        customer_name: req.user.name,
+        customer_email: req.user.email,
+        customer_phone: req.user.phone || '9999999999',
+      },
+      order_meta: {
+        return_url: `${process.env.CLIENT_URL}/dashboard?cashfree_order_id={order_id}`,
+        notify_url: `${process.env.BACKEND_URL || process.env.CLIENT_URL?.replace(':5173', ':5000')}/api/wallet/cashfree/webhook`,
+      },
+      order_note: `Wallet top-up for ${req.user.email}`,
+    };
+
+    const response = await Cashfree.PGCreateOrder('2023-08-01', orderRequest);
+    const { payment_session_id, order_id } = response.data;
+
+    // Save a pending payment record
+    await Payment.create({
+      user: req.user._id,
+      amount: parsed,
+      method: 'cashfree',
+      status: 'pending',
+      type: 'topup',
+      transactionId: order_id,
+      note: `Cashfree wallet top-up — awaiting payment`,
+    });
+
+    res.json({ payment_session_id, order_id });
+  } catch (err) {
+    console.error('Cashfree create order error:', err?.response?.data || err.message);
+    res.status(500).json({ error: 'Failed to create payment order. Please try again.' });
+  }
+};
+
+// Verify payment after user returns from Cashfree
+exports.verifyCashfreePayment = async (req, res) => {
+  try {
+    const { order_id } = req.body;
+    if (!order_id) return res.status(400).json({ error: 'order_id is required' });
+
+    const response = await Cashfree.PGFetchOrder('2023-08-01', order_id);
+    const order = response.data;
+
+    if (order.order_status !== 'PAID') {
+      return res.status(400).json({ error: `Payment not completed. Status: ${order.order_status}` });
+    }
+
+    // Find the pending payment
+    const payment = await Payment.findOne({ transactionId: order_id, type: 'topup', user: req.user._id });
+    if (!payment) return res.status(404).json({ error: 'Payment record not found' });
+    if (payment.status === 'completed') {
+      return res.json({ message: 'Already credited', balance: req.user.wallet });
+    }
+
+    // Credit wallet
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      { $inc: { wallet: payment.amount } },
+      { new: true }
+    );
+
+    payment.status = 'completed';
+    payment.verifiedByAdmin = true;
+    payment.note = `Cashfree payment verified — ${order_id}`;
+    await payment.save();
+
+    await Notification.create({
+      userId: req.user._id,
+      type: 'wallet_topup',
+      data: {
+        title: '✅ Wallet Topped Up',
+        message: `₹${payment.amount} has been added to your wallet via Cashfree. New balance: ₹${updatedUser.wallet.toFixed(2)}.`,
+      },
+    });
+
+    const io = req.app.get('io');
+    if (io) io.to(`user_${req.user._id}`).emit('wallet_updated', { balance: updatedUser.wallet });
+
+    res.json({ message: `₹${payment.amount} credited successfully`, balance: updatedUser.wallet });
+  } catch (err) {
+    console.error('Cashfree verify error:', err?.response?.data || err.message);
+    res.status(500).json({ error: 'Verification failed. Please contact support.' });
+  }
+};
+
+// Webhook — Cashfree calls this automatically on payment events
+exports.cashfreeWebhook = async (req, res) => {
+  try {
+    const rawBody = JSON.stringify(req.body);
+    const signature = req.headers['x-webhook-signature'];
+    const timestamp = req.headers['x-webhook-timestamp'];
+
+    // Verify webhook signature
+    try {
+      Cashfree.PGVerifyWebhookSignature(signature, rawBody, timestamp);
+    } catch {
+      return res.status(400).json({ error: 'Invalid webhook signature' });
+    }
+
+    const { data, type } = req.body;
+    if (type !== 'PAYMENT_SUCCESS_WEBHOOK') return res.sendStatus(200);
+
+    const orderId = data?.order?.order_id;
+    const paidAmount = data?.payment?.payment_amount;
+    if (!orderId) return res.sendStatus(200);
+
+    const payment = await Payment.findOne({ transactionId: orderId, type: 'topup' }).populate('user', 'name email wallet');
+    if (!payment || payment.status === 'completed') return res.sendStatus(200);
+
+    const updatedUser = await User.findByIdAndUpdate(
+      payment.user._id,
+      { $inc: { wallet: paidAmount || payment.amount } },
+      { new: true }
+    );
+
+    payment.status = 'completed';
+    payment.verifiedByAdmin = true;
+    payment.note = `Cashfree webhook confirmed — ${orderId}`;
+    await payment.save();
+
+    await Notification.create({
+      userId: payment.user._id,
+      type: 'wallet_topup',
+      data: {
+        title: '✅ Wallet Topped Up',
+        message: `₹${paidAmount || payment.amount} has been added to your wallet via Cashfree.`,
+      },
+    });
+
+    res.sendStatus(200);
+  } catch (err) {
+    console.error('Cashfree webhook error:', err.message);
+    res.sendStatus(500);
+  }
+};
