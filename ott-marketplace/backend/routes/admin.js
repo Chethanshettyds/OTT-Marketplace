@@ -18,9 +18,16 @@ router.delete('/products/:id', ctrl.deleteProduct);
 // ── Users ──────────────────────────────────────────────────────────────────
 router.get('/users', ctrl.listUsers);
 router.get('/users/:id', ctrl.getUser);
+router.put('/users/:id', ctrl.editUser);
 router.put('/users/:id/toggle', ctrl.toggleUserActive);
 router.delete('/users/:id', ctrl.deleteUser);
 router.post('/users/:userId/fund', ctrl.fundUserWallet);
+router.post('/users/:id/reset-password', ctrl.resetUserPassword);
+router.get('/users/:id/signin-history', ctrl.getUserSigninHistory);
+router.get('/users/:id/payments', ctrl.getUserPayments);
+router.post('/users/:id/payments', ctrl.addUserPayment);
+router.put('/users/:id/payments/:paymentId', ctrl.updateUserPayment);
+router.delete('/users/:id/payments/:paymentId', ctrl.deleteUserPayment);
 
 // ── Orders ─────────────────────────────────────────────────────────────────
 router.get('/orders', ctrl.listOrders);

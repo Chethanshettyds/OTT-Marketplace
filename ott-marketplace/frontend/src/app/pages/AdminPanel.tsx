@@ -19,6 +19,7 @@ import ChatbotAnalytics from '../components/ChatbotAnalytics';
 import YourDevices from '../components/YourDevices';
 import { useAuthStore } from '../store/authStore';
 import AdminReports from '../components/AdminReports';
+import EditUserModal from '../components/EditUserModal';
 
 const TABS = ['Dashboard', 'Products', 'Orders', 'Users', 'Payments', 'Tickets', 'Broadcast', 'AI Chat', 'Reports', 'Settings'];
 
@@ -115,6 +116,8 @@ export default function AdminPanel() {
 
   // ── Fund Wallet modal ─────────────────────────────────────────────────────
   const [fundTarget, setFundTarget] = useState<User | null>(null);
+  // ── Edit User modal ────────────────────────────────────────────────────────
+  const [editUserTarget, setEditUserTarget] = useState<User | null>(null);
   const { counts, markRead } = useNotifications();
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
 
@@ -779,6 +782,11 @@ export default function AdminPanel() {
                                 {/* Actions */}
                                 <td className="px-4 py-3.5">
                                   <div className="flex gap-1.5">
+                                    <button onClick={() => setEditUserTarget(r)}
+                                      className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 rounded-lg transition-colors font-medium"
+                                      title="Edit user">
+                                      <i className="pi pi-pencil text-xs" /> Edit
+                                    </button>
                                     <button onClick={() => setFundTarget(r)}
                                       className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-lg transition-colors font-medium"
                                       title="Add funds">
@@ -1654,6 +1662,19 @@ export default function AdminPanel() {
         onClose={() => setFundTarget(null)}
         onSuccess={handleFundSuccess}
       />
+
+      <AnimatePresence>
+        {editUserTarget && (
+          <EditUserModal
+            user={editUserTarget}
+            onClose={() => setEditUserTarget(null)}
+            onUpdated={(updated) => {
+              setUsers((prev) => prev.map((u) => u._id === updated._id ? updated : u));
+              setEditUserTarget(updated);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

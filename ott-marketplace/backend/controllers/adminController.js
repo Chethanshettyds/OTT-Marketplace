@@ -3,6 +3,8 @@ const Product = require('../models/Product');
 const { PLATFORM_THEMES, PLATFORM_SERVICES } = require('../models/Product');
 const Order = require('../models/Order');
 const Payment = require('../models/Payment');
+const Session = require('../models/Session');
+const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
 const { sendMail, walletTopupMail, orderDeliveredMail } = require('../utils/mailer');
 
@@ -358,6 +360,173 @@ exports.fundUserWallet = async (req, res) => {
         transactionId: txnId,
       }),
     }).catch(() => {});
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ─── Admin: Reset User Password ──────────────────────────────────────────────
+exports.resetUserPassword = async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password || password.length < 6)
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.role === 'admin') return res.status(403).json({ error: 'Cannot reset admin password' });
+
+    user.password = password; // pre-save hook hashes it
+    user.passwordChangedAt = new Date();
+    await user.save();
+
+    res.json({ message: `Password reset for ${user.name}` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ─── Admin: Get User Sign-in History (last 10 days) ──────────────────────────
+exports.getUserSigninHistory = async (req, res) => {
+  try {
+    const since = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+    const sessions = await Session.find({
+      userId: req.params.id,
+      createdAt: { $gte: since },
+    })
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+
+    res.json({ sessions });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ─── Admin: Edit User (name, email, wallet, status) ──────────────────────────
+exports.editUser = async (req, res) => {
+  try {
+    const { name, email, wallet, isActive } = req.body;
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.role === 'admin') return res.status(403).json({ error: 'Cannot edit admin accounts' });
+
+    if (name !== undefined) user.name = name.trim();
+    if (email !== undefined) {
+      const existing = await User.findOne({ email: email.toLowerCase().trim(), _id: { $ne: user._id } });
+      if (existing) return res.status(409).json({ error: 'Email already in use' });
+      user.email = email.toLowerCase().trim();
+    }
+    if (wallet !== undefined) user.wallet = Math.max(0, parseFloat(wallet) || 0);
+    if (isActive !== undefined) user.isActive = Boolean(isActive);
+
+    await user.save({ validateBeforeSave: false });
+    res.json({ user, message: 'User updated' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ─── Admin: Get User Payments ─────────────────────────────────────────────────
+exports.getUserPayments = async (req, res) => {
+  try {
+    const payments = await Payment.find({ user: req.params.id })
+      .populate('order', 'orderNumber amount status')
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json({ payments });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ─── Admin: Add Payment for User ─────────────────────────────────────────────
+exports.addUserPayment = async (req, res) => {
+  try {
+    const { amount, method, type, status, transactionId, note } = req.body;
+    const parsed = parseFloat(amount);
+    if (!parsed || parsed <= 0) return res.status(400).json({ error: 'Enter a valid amount > 0' });
+    if (!type) return res.status(400).json({ error: 'Payment type is required' });
+
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Adjust wallet balance for topup/refund types
+    if (type === 'topup' || type === 'refund') {
+      user.wallet = parseFloat((user.wallet + parsed).toFixed(2));
+      await user.save({ validateBeforeSave: false });
+      const io = req.app.get('io');
+      if (io) io.to(`user_${user._id}`).emit('walletUpdate', { balance: user.wallet });
+    } else if (type === 'purchase') {
+      if (user.wallet < parsed) return res.status(400).json({ error: 'Insufficient wallet balance' });
+      user.wallet = parseFloat((user.wallet - parsed).toFixed(2));
+      await user.save({ validateBeforeSave: false });
+      const io = req.app.get('io');
+      if (io) io.to(`user_${user._id}`).emit('walletUpdate', { balance: user.wallet });
+    }
+
+    const txnId = transactionId || ('ADMIN-PAY-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase());
+    const payment = await Payment.create({
+      user: user._id,
+      amount: parsed,
+      method: method || 'admin',
+      status: status || 'completed',
+      type,
+      transactionId: txnId,
+      note: note || `Admin manual ${type}`,
+      verifiedByAdmin: true,
+    });
+
+    res.status(201).json({ payment, newBalance: user.wallet, message: 'Payment added' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ─── Admin: Delete Payment for User ──────────────────────────────────────────
+exports.deleteUserPayment = async (req, res) => {
+  try {
+    const payment = await Payment.findById(req.params.paymentId);
+    if (!payment) return res.status(404).json({ error: 'Payment not found' });
+    if (payment.user.toString() !== req.params.id)
+      return res.status(403).json({ error: 'Payment does not belong to this user' });
+
+    // Reverse wallet effect
+    const user = await User.findById(req.params.id);
+    if (user && payment.status === 'completed') {
+      if (payment.type === 'topup' || payment.type === 'refund') {
+        user.wallet = Math.max(0, parseFloat((user.wallet - payment.amount).toFixed(2)));
+      } else if (payment.type === 'purchase') {
+        user.wallet = parseFloat((user.wallet + payment.amount).toFixed(2));
+      }
+      await user.save({ validateBeforeSave: false });
+      const io = req.app.get('io');
+      if (io) io.to(`user_${user._id}`).emit('walletUpdate', { balance: user.wallet });
+    }
+
+    await Payment.findByIdAndDelete(req.params.paymentId);
+    res.json({ message: 'Payment deleted', newBalance: user?.wallet });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ─── Admin: Update Payment for User ──────────────────────────────────────────
+exports.updateUserPayment = async (req, res) => {
+  try {
+    const { status, note, transactionId } = req.body;
+    const payment = await Payment.findById(req.params.paymentId);
+    if (!payment) return res.status(404).json({ error: 'Payment not found' });
+    if (payment.user.toString() !== req.params.id)
+      return res.status(403).json({ error: 'Payment does not belong to this user' });
+
+    if (status) payment.status = status;
+    if (note !== undefined) payment.note = note;
+    if (transactionId !== undefined) payment.transactionId = transactionId;
+    await payment.save();
+
+    res.json({ payment, message: 'Payment updated' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
